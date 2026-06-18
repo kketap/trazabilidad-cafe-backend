@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
@@ -5,9 +8,27 @@ import routes from "./routes";
 
 const app = express();
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.FRONTEND_LOCAL_URL,
+  process.env.FRONTEND_PRODUCTION_URL,
+].filter(Boolean) as string[];
+
+console.log("CORS allowed origins:", allowedOrigins);
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin(origin, callback) {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`Origen no permitido por CORS: ${origin}`));
+    },
     credentials: true,
   })
 );
