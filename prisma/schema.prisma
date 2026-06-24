@@ -5,11 +5,40 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Cosecha {
+  id                    Int      @id @default(autoincrement())
+  fecha                 DateTime
+  kilosCosechados       Float
+  cantidadCosechadores  Int
+  lotes                 String
+  totalHectareas        Float
+  tipoCosecha           String
+
+  procesos              ProcesoTrazabilidad[]
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model ProcesoTrazabilidad {
+  id                 Int      @id @default(autoincrement())
+  fecha              DateTime
+  etapa              String
+  kilosIngresados    Float
+  kilosResultantes   Float
+  porcentajeMerma    Float
+
+  cosechaId          Int
+  cosecha            Cosecha  @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
