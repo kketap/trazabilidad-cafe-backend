@@ -14,31 +14,61 @@ datasource db {
 }
 
 model Cosecha {
-  id                    Int      @id @default(autoincrement())
-  fecha                 DateTime
-  kilosCosechados       Float
-  cantidadCosechadores  Int
-  lotes                 String
-  totalHectareas        Float
-  tipoCosecha           String
+  id                   Int      @id @default(autoincrement())
+  fecha                DateTime
+  kilosCosechados      Float
+  cantidadCosechadores Int
+  lotes                String
+  totalHectareas       Float
+  tipoCosecha          String
 
-  procesos              ProcesoTrazabilidad[]
+  procesos ProcesoTrazabilidad[]
 
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  cosechaLotes CosechaLote[]
+}
+
+model Lote {
+  id          Int     @id @default(autoincrement())
+  codigo      String  @unique
+  nombre      String?
+  hectareas   Float?
+  ubicacion   String?
+  observacion String?
+  activo      Boolean @default(true)
+
+  cosechaLotes CosechaLote[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CosechaLote {
+  id Int @id @default(autoincrement())
+
+  cosechaId Int
+  cosecha   Cosecha @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
+
+  loteId Int
+  lote   Lote @relation(fields: [loteId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([cosechaId, loteId])
 }
 
 model ProcesoTrazabilidad {
-  id                 Int      @id @default(autoincrement())
-  fecha              DateTime
-  etapa              String
-  kilosIngresados    Float
-  kilosResultantes   Float
-  porcentajeMerma    Float
+  id               Int      @id @default(autoincrement())
+  fecha            DateTime
+  etapa            String
+  kilosIngresados  Float
+  kilosResultantes Float
+  porcentajeMerma  Float
 
-  cosechaId          Int
-  cosecha            Cosecha  @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
+  cosechaId Int
+  cosecha   Cosecha @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
 
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

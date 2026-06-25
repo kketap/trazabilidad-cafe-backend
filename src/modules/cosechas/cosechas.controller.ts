@@ -8,6 +8,15 @@ import {
     actualizarCosecha,
 } from "./cosechas.service";
 
+function getRangoMesActual() {
+    const now = new Date();
+
+    const desde = new Date(now.getFullYear(), now.getMonth(), 1);
+    const hasta = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    return { desde, hasta };
+}
+
 export async function getCosechas(_req: Request, res: Response) {
     try {
         const cosechas = await listarCosechas();
@@ -50,9 +59,15 @@ export async function deleteCosecha(req: Request, res: Response) {
     }
 }
 
-export async function getCosechasResumen(_req: Request, res: Response) {
+export async function getCosechasResumen(req: Request, res: Response) {
     try {
-        const resumen = await obtenerResumenCosechas();
+        const periodo = req.query.periodo;
+
+        const filtros =
+            periodo === "mes-actual" ? getRangoMesActual() : {};
+
+        const resumen = await obtenerResumenCosechas(filtros);
+
         res.json(resumen);
     } catch (error) {
         console.error("Error obteniendo resumen de cosechas:", error);

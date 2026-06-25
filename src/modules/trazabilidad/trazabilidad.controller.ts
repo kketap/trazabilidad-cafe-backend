@@ -6,6 +6,15 @@ import {
     obtenerResumenTrazabilidad,
 } from "./trazabilidad.service";
 
+function getRangoMesActual() {
+    const now = new Date();
+
+    const desde = new Date(now.getFullYear(), now.getMonth(), 1);
+    const hasta = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    return { desde, hasta };
+}
+
 export async function getProcesos(_req: Request, res: Response) {
     try {
         const procesos = await listarProcesos();
@@ -26,9 +35,15 @@ export async function createProceso(req: Request, res: Response) {
     }
 }
 
-export async function getTrazabilidadResumen(_req: Request, res: Response) {
+export async function getTrazabilidadResumen(req: Request, res: Response) {
     try {
-        const resumen = await obtenerResumenTrazabilidad();
+        const periodo = req.query.periodo;
+
+        const filtros =
+            periodo === "mes-actual" ? getRangoMesActual() : {};
+
+        const resumen = await obtenerResumenTrazabilidad(filtros);
+
         res.json(resumen);
     } catch (error) {
         console.error("Error obteniendo resumen de trazabilidad:", error);

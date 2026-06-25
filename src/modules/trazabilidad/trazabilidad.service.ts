@@ -44,8 +44,24 @@ export async function crearProceso(data: ProcesoInput) {
     });
 }
 
-export async function obtenerResumenTrazabilidad() {
-    const procesos = await prisma.procesoTrazabilidad.findMany();
+type ResumenFiltros = {
+    desde?: Date;
+    hasta?: Date;
+};
+
+export async function obtenerResumenTrazabilidad(filtros: ResumenFiltros = {}) {
+    const procesos = await prisma.procesoTrazabilidad.findMany({
+        where: {
+            ...(filtros.desde || filtros.hasta
+                ? {
+                    fecha: {
+                        ...(filtros.desde && { gte: filtros.desde }),
+                        ...(filtros.hasta && { lt: filtros.hasta }),
+                    },
+                }
+                : {}),
+        },
+    });
 
     const totalIngresado = procesos.reduce(
         (total, proceso) => total + proceso.kilosIngresados,
@@ -59,8 +75,10 @@ export async function obtenerResumenTrazabilidad() {
 
     const mermaPromedio =
         procesos.length > 0
-            ? procesos.reduce((total, proceso) => total + proceso.porcentajeMerma, 0) /
-            procesos.length
+            ? procesos.reduce(
+                (total, proceso) => total + proceso.porcentajeMerma,
+                0,
+            ) / procesos.length
             : 0;
 
     return {
