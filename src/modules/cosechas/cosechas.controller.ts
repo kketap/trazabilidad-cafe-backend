@@ -6,6 +6,8 @@ import {
     listarCosechas,
     obtenerResumenCosechas,
     actualizarCosecha,
+    compararSecciones,
+    obtenerTopAportantes,
 } from "./cosechas.service";
 
 function getRangoMesActual() {
@@ -72,5 +74,34 @@ export async function getCosechasResumen(req: Request, res: Response) {
     } catch (error) {
         console.error("Error obteniendo resumen de cosechas:", error);
         res.status(500).json({ message: "Error obteniendo resumen de cosechas" });
+    }
+}
+
+export async function postCompararSecciones(req: Request, res: Response) {
+    try {
+        const { seccionesIds } = req.body;
+
+        if (!Array.isArray(seccionesIds) || seccionesIds.length === 0) {
+            res.status(400).json({
+                message: "seccionesIds debe ser un array con al menos un ID",
+            });
+            return;
+        }
+
+        const resultado = await compararSecciones(seccionesIds);
+        res.json(resultado);
+    } catch (error) {
+        console.error("Error comparando secciones:", error);
+        res.status(500).json({ message: "Error comparando secciones" });
+    }
+}
+
+export async function getTopAportantes(_req: Request, res: Response) {
+    try {
+        const resultado = await obtenerTopAportantes();
+        res.json(resultado);
+    } catch (error) {
+        console.error("Error obteniendo top aportantes:", error);
+        res.status(500).json({ message: "Error obteniendo top aportantes" });
     }
 }

@@ -4,6 +4,12 @@ exports.getProcesos = getProcesos;
 exports.createProceso = createProceso;
 exports.getTrazabilidadResumen = getTrazabilidadResumen;
 const trazabilidad_service_1 = require("./trazabilidad.service");
+function getRangoMesActual() {
+    const now = new Date();
+    const desde = new Date(now.getFullYear(), now.getMonth(), 1);
+    const hasta = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    return { desde, hasta };
+}
 async function getProcesos(_req, res) {
     try {
         const procesos = await (0, trazabilidad_service_1.listarProcesos)();
@@ -24,9 +30,11 @@ async function createProceso(req, res) {
         res.status(400).json({ message: "Error creando proceso" });
     }
 }
-async function getTrazabilidadResumen(_req, res) {
+async function getTrazabilidadResumen(req, res) {
     try {
-        const resumen = await (0, trazabilidad_service_1.obtenerResumenTrazabilidad)();
+        const periodo = req.query.periodo;
+        const filtros = periodo === "mes-actual" ? getRangoMesActual() : {};
+        const resumen = await (0, trazabilidad_service_1.obtenerResumenTrazabilidad)(filtros);
         res.json(resumen);
     }
     catch (error) {

@@ -6,6 +6,12 @@ exports.updateCosecha = updateCosecha;
 exports.deleteCosecha = deleteCosecha;
 exports.getCosechasResumen = getCosechasResumen;
 const cosechas_service_1 = require("./cosechas.service");
+function getRangoMesActual() {
+    const now = new Date();
+    const desde = new Date(now.getFullYear(), now.getMonth(), 1);
+    const hasta = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    return { desde, hasta };
+}
 async function getCosechas(_req, res) {
     try {
         const cosechas = await (0, cosechas_service_1.listarCosechas)();
@@ -48,9 +54,11 @@ async function deleteCosecha(req, res) {
         res.status(400).json({ message: "Error eliminando cosecha" });
     }
 }
-async function getCosechasResumen(_req, res) {
+async function getCosechasResumen(req, res) {
     try {
-        const resumen = await (0, cosechas_service_1.obtenerResumenCosechas)();
+        const periodo = req.query.periodo;
+        const filtros = periodo === "mes-actual" ? getRangoMesActual() : {};
+        const resumen = await (0, cosechas_service_1.obtenerResumenCosechas)(filtros);
         res.json(resumen);
     }
     catch (error) {
