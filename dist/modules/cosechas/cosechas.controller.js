@@ -5,6 +5,8 @@ exports.createCosecha = createCosecha;
 exports.updateCosecha = updateCosecha;
 exports.deleteCosecha = deleteCosecha;
 exports.getCosechasResumen = getCosechasResumen;
+exports.postCompararSecciones = postCompararSecciones;
+exports.getTopAportantes = getTopAportantes;
 const cosechas_service_1 = require("./cosechas.service");
 function getRangoMesActual() {
     const now = new Date();
@@ -64,6 +66,33 @@ async function getCosechasResumen(req, res) {
     catch (error) {
         console.error("Error obteniendo resumen de cosechas:", error);
         res.status(500).json({ message: "Error obteniendo resumen de cosechas" });
+    }
+}
+async function postCompararSecciones(req, res) {
+    try {
+        const { seccionesIds } = req.body;
+        if (!Array.isArray(seccionesIds) || seccionesIds.length === 0) {
+            res.status(400).json({
+                message: "seccionesIds debe ser un array con al menos un ID",
+            });
+            return;
+        }
+        const resultado = await (0, cosechas_service_1.compararSecciones)(seccionesIds);
+        res.json(resultado);
+    }
+    catch (error) {
+        console.error("Error comparando secciones:", error);
+        res.status(500).json({ message: "Error comparando secciones" });
+    }
+}
+async function getTopAportantes(_req, res) {
+    try {
+        const resultado = await (0, cosechas_service_1.obtenerTopAportantes)();
+        res.json(resultado);
+    }
+    catch (error) {
+        console.error("Error obteniendo top aportantes:", error);
+        res.status(500).json({ message: "Error obteniendo top aportantes" });
     }
 }
 //# sourceMappingURL=cosechas.controller.js.map
