@@ -9,7 +9,6 @@ type CosechaInput = {
     loteIds?: number[];
     totalHectareas: number;
     tipoCosecha: string;
-    seccionId?: number | null;
 };
 
 export async function listarCosechas() {
@@ -20,7 +19,6 @@ export async function listarCosechas() {
                     lote: true,
                 },
             },
-            seccion: true,
         },
         orderBy: {
             fecha: "desc",
@@ -45,7 +43,6 @@ export async function crearCosecha(data: CosechaInput) {
             lotes: lotesTexto,
             totalHectareas: Number(data.totalHectareas),
             tipoCosecha: data.tipoCosecha,
-            seccionId: data.seccionId !== undefined ? Number(data.seccionId) : null,
 
             cosechaLotes: {
                 create: loteIds.map((loteId) => ({
@@ -87,9 +84,6 @@ export async function actualizarCosecha(id: number, data: Partial<CosechaInput>)
                 }),
                 ...(data.tipoCosecha !== undefined && {
                     tipoCosecha: data.tipoCosecha,
-                }),
-                ...(data.seccionId !== undefined && {
-                    seccionId: data.seccionId === null ? null : Number(data.seccionId),
                 }),
             },
         });
@@ -171,71 +165,3 @@ export async function obtenerResumenCosechas(filtros: ResumenFiltros = {}) {
     };
 }
 
-export async function compararSecciones(seccionesIds: number[]) {
-    const [produccionTotal, produccionSecciones] = await Promise.all([
-        prisma.cosecha.aggregate({
-            _sum: { kilosCosechados: true },
-        }),
-        prisma.cosecha.aggregate({
-            where: {
-                seccionId: { in: seccionesIds },
-            },
-            _sum: { kilosCosechados: true },
-        }),
-    ]);
-
-    const totalGeneral = produccionTotal._sum.kilosCosechados ?? 0;
-    const totalSecciones = produccionSecciones._sum.kilosCosechados ?? 0;
-
-    const porcentaje =
-        totalGeneral > 0
-            ? (totalSecciones / totalGeneral) * 100
-            : 0;
-
-    return {
-        seccionesIds,
-        totalGeneralKilos: totalGeneral,
-        totalSeccionesKilos: totalSecciones,
-        porcentaje: Number(porcentaje.toFixed(2)),
-    };
-}
-
-export async function obtenerTopAportantes() {
-    const [topKilos, topHectareas, todasCosechas] = await Promise.all([
-        prisma.cosecha.findMany({
-            orderBy: { kilosCosechados: "desc" },
-            take: 3,
-            include: { seccion: true },
-        }),
-        prisma.cosecha.findMany({
-            orderBy: { totalHectareas: "desc" },
-            take: 3,
-            include: { seccion: true },
-        }),
-        prisma.cosecha.findMany({
-            include: { seccion: true },
-        }),
-    ]);
-
-    const conRendimiento = todasCosechas
-        .map((cosecha) => ({
-            id: cosecha.id,
-            fecha: cosecha.fecha,
-            kilosCosechados: cosecha.kilosCosechados,
-            totalHectareas: cosecha.totalHectareas,
-            tipoCosecha: cosecha.tipoCosecha,
-            seccion: cosecha.seccion,
-            rendimiento:
-                cosecha.totalHectareas > 0
-                    ? cosecha.kilosCosechados / cosecha.totalHectareas
-                    : 0,
-        }))
-        .sort((a, b) => b.rendimiento - a.rendimiento)
-        .slice(0, 3);
-
-    return {
-        topKilos,
-        topHectareas,
-        topRendimiento: conRendimiento,
-    };
-}

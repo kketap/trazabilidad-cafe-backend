@@ -3,7 +3,7 @@ import { Router } from "express";
 import cosechasRoutes from "../modules/cosechas/cosechas.routes";
 import trazabilidadRoutes from "../modules/trazabilidad/trazabilidad.routes";
 import lotesRoutes from "../modules/lotes/lotes.routes";
-import seccionesRoutes from "../modules/secciones/secciones.routes";
+import kpisRoutes from "../modules/kpis/kpis.routes";
 
 const router = Router();
 
@@ -17,6 +17,6 @@ router.get("/health", (_req, res) => {
 router.use("/cosechas", cosechasRoutes);
 router.use("/trazabilidad", trazabilidadRoutes);
 router.use("/lotes", lotesRoutes);
-router.use("/secciones", seccionesRoutes);
+router.use("/kpis", kpisRoutes);
 
 export default router;

@@ -22,26 +22,11 @@ model Cosecha {
   totalHectareas       Float
   tipoCosecha          String
 
-  seccionId Int?
-  seccion   SeccionCosecha? @relation(fields: [seccionId], references: [id])
-
   procesos ProcesoTrazabilidad[]
 
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   cosechaLotes CosechaLote[]
-}
-
-model SeccionCosecha {
-  id          Int       @id @default(autoincrement())
-  titulo      String
-  descripcion String?
-  color       String
-
-  cosechas Cosecha[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
 model Lote {
