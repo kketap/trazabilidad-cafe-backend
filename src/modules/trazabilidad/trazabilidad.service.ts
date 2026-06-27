@@ -44,6 +44,42 @@ export async function crearProceso(data: ProcesoInput) {
     });
 }
 
+export async function actualizarProceso(id: number, data: Partial<ProcesoInput>) {
+    const kilosIngresados =
+        data.kilosIngresados !== undefined ? Number(data.kilosIngresados) : undefined;
+    const kilosResultantes =
+        data.kilosResultantes !== undefined ? Number(data.kilosResultantes) : undefined;
+
+    let porcentajeMerma: number | undefined;
+    if (kilosIngresados !== undefined && kilosResultantes !== undefined) {
+        porcentajeMerma =
+            kilosIngresados > 0
+                ? ((kilosIngresados - kilosResultantes) / kilosIngresados) * 100
+                : 0;
+    }
+
+    return prisma.procesoTrazabilidad.update({
+        where: { id },
+        data: {
+            ...(data.fecha && { fecha: new Date(data.fecha) }),
+            ...(data.cosechaId !== undefined && { cosechaId: Number(data.cosechaId) }),
+            ...(data.etapa !== undefined && { etapa: data.etapa }),
+            ...(kilosIngresados !== undefined && { kilosIngresados }),
+            ...(kilosResultantes !== undefined && { kilosResultantes }),
+            ...(porcentajeMerma !== undefined && { porcentajeMerma }),
+        },
+        include: {
+            cosecha: true,
+        },
+    });
+}
+
+export async function eliminarProceso(id: number) {
+    return prisma.procesoTrazabilidad.delete({
+        where: { id },
+    });
+}
+
 type ResumenFiltros = {
     desde?: Date;
     hasta?: Date;

@@ -4,6 +4,8 @@ import {
     crearProceso,
     listarProcesos,
     obtenerResumenTrazabilidad,
+    actualizarProceso,
+    eliminarProceso,
 } from "./trazabilidad.service";
 
 function getRangoMesActual() {
@@ -48,5 +50,27 @@ export async function getTrazabilidadResumen(req: Request, res: Response) {
     } catch (error) {
         console.error("Error obteniendo resumen de trazabilidad:", error);
         res.status(500).json({ message: "Error obteniendo resumen de trazabilidad" });
+    }
+}
+
+export async function updateProceso(req: Request, res: Response) {
+    try {
+        const id = Number(req.params.id);
+        const proceso = await actualizarProceso(id, req.body);
+        res.json(proceso);
+    } catch (error) {
+        console.error("Error actualizando proceso:", error);
+        res.status(400).json({ message: "Error actualizando proceso" });
+    }
+}
+
+export async function deleteProceso(req: Request, res: Response) {
+    try {
+        const id = Number(req.params.id);
+        await eliminarProceso(id);
+        res.json({ message: "Proceso eliminado correctamente" });
+    } catch (error) {
+        console.error("Error eliminando proceso:", error);
+        res.status(400).json({ message: "Error eliminando proceso" });
     }
 }
