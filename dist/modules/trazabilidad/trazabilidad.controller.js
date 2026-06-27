@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getProcesos = getProcesos;
 exports.createProceso = createProceso;
 exports.getTrazabilidadResumen = getTrazabilidadResumen;
+exports.updateProceso = updateProceso;
+exports.deleteProceso = deleteProceso;
 const trazabilidad_service_1 = require("./trazabilidad.service");
 function getRangoMesActual() {
     const now = new Date();
@@ -40,6 +42,28 @@ async function getTrazabilidadResumen(req, res) {
     catch (error) {
         console.error("Error obteniendo resumen de trazabilidad:", error);
         res.status(500).json({ message: "Error obteniendo resumen de trazabilidad" });
+    }
+}
+async function updateProceso(req, res) {
+    try {
+        const id = Number(req.params.id);
+        const proceso = await (0, trazabilidad_service_1.actualizarProceso)(id, req.body);
+        res.json(proceso);
+    }
+    catch (error) {
+        console.error("Error actualizando proceso:", error);
+        res.status(400).json({ message: "Error actualizando proceso" });
+    }
+}
+async function deleteProceso(req, res) {
+    try {
+        const id = Number(req.params.id);
+        await (0, trazabilidad_service_1.eliminarProceso)(id);
+        res.json({ message: "Proceso eliminado correctamente" });
+    }
+    catch (error) {
+        console.error("Error eliminando proceso:", error);
+        res.status(400).json({ message: "Error eliminando proceso" });
     }
 }
 //# sourceMappingURL=trazabilidad.controller.js.map
