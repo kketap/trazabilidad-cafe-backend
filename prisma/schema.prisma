@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,46 +8,39 @@ datasource db {
 }
 
 model Cosecha {
-  id                   Int      @id @default(autoincrement())
+  id                   Int                   @id @default(autoincrement())
   fecha                DateTime
   kilosCosechados      Float
   cantidadCosechadores Int
   lotes                String
   totalHectareas       Float
   tipoCosecha          String
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  cosechaLotes         CosechaLote[]
+  procesos             ProcesoTrazabilidad[]
+}
 
-  procesos ProcesoTrazabilidad[]
-
+model Lote {
+  id           Int           @id @default(autoincrement())
+  codigo       String        @unique
+  nombre       String?
+  hectareas    Float?
+  ubicacion    String?
+  observacion  String?
+  activo       Boolean       @default(true)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   cosechaLotes CosechaLote[]
 }
 
-model Lote {
-  id          Int     @id @default(autoincrement())
-  codigo      String  @unique
-  nombre      String?
-  hectareas   Float?
-  ubicacion   String?
-  observacion String?
-  activo      Boolean @default(true)
-
-  cosechaLotes CosechaLote[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 model CosechaLote {
-  id Int @id @default(autoincrement())
-
+  id        Int      @id @default(autoincrement())
   cosechaId Int
-  cosecha   Cosecha @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
-
-  loteId Int
-  lote   Lote @relation(fields: [loteId], references: [id])
-
+  loteId    Int
   createdAt DateTime @default(now())
+  cosecha   Cosecha  @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
+  lote      Lote     @relation(fields: [loteId], references: [id])
 
   @@unique([cosechaId, loteId])
 }
@@ -65,10 +52,8 @@ model ProcesoTrazabilidad {
   kilosIngresados  Float
   kilosResultantes Float
   porcentajeMerma  Float
-
-  cosechaId Int
-  cosecha   Cosecha @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  cosechaId        Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  cosecha          Cosecha  @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
 }
