@@ -4,6 +4,8 @@ import cosechasRoutes from "../modules/cosechas/cosechas.routes";
 import trazabilidadRoutes from "../modules/trazabilidad/trazabilidad.routes";
 import lotesRoutes from "../modules/lotes/lotes.routes";
 import kpisRoutes from "../modules/kpis/kpis.routes";
+import authRoutes from "../modules/auth/auth.routes";
+import { verifyToken } from "../middlewares/verifyToken";
 
 const router = Router();
 
@@ -13,6 +15,10 @@ router.get("/health", (_req, res) => {
         service: "trazabilidad-cafe-backend",
     });
 });
+
+router.use("/auth", authRoutes);
+
+router.use(verifyToken);
 
 router.use("/cosechas", cosechasRoutes);
 router.use("/trazabilidad", trazabilidadRoutes);
