@@ -33,14 +33,24 @@ export async function getTrabajadorById(req: Request, res: Response) {
 
 export async function createTrabajador(req: Request, res: Response) {
   try {
-    const { nombres, dni, rol } = req.body;
+    const { nombres, apellidos, dni, rol, telefono, activo } = req.body;
 
     if (!nombres || !dni) {
-      res.status(400).json({ ok: false, message: "Los campos 'nombres' y 'dni' son requeridos" });
+      res.status(400).json({
+        ok: false,
+        message: "Los campos 'nombres' y 'dni' son requeridos",
+      });
       return;
     }
 
-    const nuevoTrabajador = await trabajadoresService.crearTrabajador({ nombres, dni, rol });
+    const nuevoTrabajador = await trabajadoresService.crearTrabajador({
+      nombres,
+      apellidos,
+      dni,
+      rol,
+      telefono,
+      activo,
+    });
     res.status(201).json({ ok: true, data: nuevoTrabajador });
   } catch (error: any) {
     if (error.code === "P2002") {
@@ -59,8 +69,16 @@ export async function updateTrabajador(req: Request, res: Response) {
       return;
     }
 
-    const { nombres, dni, rol } = req.body;
-    const trabajadorActualizado = await trabajadoresService.actualizarTrabajador(id, { nombres, dni, rol });
+    const { nombres, apellidos, dni, rol, telefono, activo } = req.body;
+
+    const trabajadorActualizado = await trabajadoresService.actualizarTrabajador(id, {
+      nombres,
+      apellidos,
+      dni,
+      rol,
+      telefono,
+      activo,
+    });
     res.json({ ok: true, data: trabajadorActualizado });
   } catch (error: any) {
     if (error.code === "P2002") {

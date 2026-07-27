@@ -6,6 +6,7 @@ import {
     listarCosechas,
     obtenerResumenCosechas,
     actualizarCosecha,
+    obtenerReporteCosechas
 } from "./cosechas.service";
 
 function getRangoMesActual() {
@@ -29,23 +30,62 @@ export async function getCosechas(_req: Request, res: Response) {
 
 export async function createCosecha(req: Request, res: Response) {
     try {
-        const { trabajadorId, kilosCosechados, fecha } = req.body;
-
-        if (!trabajadorId) {
-            res.status(400).json({ ok: false, message: "El campo 'trabajadorId' es requerido" });
-            return;
-        }
+        const {
+            fecha,
+            kilosCosechados,
+            cantidadCosechadores,
+            tipoCosecha,
+            loteIds,
+            trabajadores,
+        } = req.body;
 
         if (!fecha || kilosCosechados === undefined) {
-            res.status(400).json({ ok: false, message: "Los campos 'fecha' y 'kilosCosechados' son requeridos" });
+            res.status(400).json({
+                ok: false,
+                message: "Los campos 'fecha' y 'kilosCosechados' son requeridos",
+            });
             return;
         }
 
-        const cosecha = await crearCosecha(req.body);
+        if (!tipoCosecha) {
+            res.status(400).json({
+                ok: false,
+                message: "El campo 'tipoCosecha' es requerido",
+            });
+            return;
+        }
+
+        if (!Array.isArray(loteIds) || loteIds.length === 0) {
+            res.status(400).json({
+                ok: false,
+                message: "Debe seleccionar al menos un lote",
+            });
+            return;
+        }
+
+        if (trabajadores !== undefined && !Array.isArray(trabajadores)) {
+            res.status(400).json({
+                ok: false,
+                message: "El campo 'trabajadores' debe ser una lista",
+            });
+            return;
+        }
+
+        const cosecha = await crearCosecha({
+            ...req.body,
+            cantidadCosechadores: Number(
+                cantidadCosechadores ??
+                (Array.isArray(trabajadores) ? trabajadores.length : 0),
+            ),
+        });
+
         res.status(201).json({ ok: true, data: cosecha });
     } catch (error: any) {
         console.error("Error creando cosecha:", error);
-        res.status(400).json({ ok: false, message: error.message || "Error creando cosecha" });
+        res.status(400).json({
+            ok: false,
+            message: error.message || "Error creando cosecha",
+        });
     }
 }
 
@@ -94,5 +134,22 @@ export async function getCosechasResumen(req: Request, res: Response) {
     } catch (error: any) {
         console.error("Error obteniendo resumen de cosechas:", error);
         res.status(500).json({ ok: false, message: "Error obteniendo resumen de cosechas" });
+    }
+}
+
+export async function getCosechasReporte(_req: Request, res: Response) {
+    try {
+        const reporte = await obtenerReporteCosechas();
+
+        res.json({
+            ok: true,
+            data: reporte,
+        });
+    } catch (error: any) {
+        console.error("Error obteniendo reporte de cosechas:", error);
+        res.status(500).json({
+            ok: false,
+            message: error.message || "Error obteniendo reporte de cosechas",
+        });
     }
 }
