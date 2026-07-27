@@ -83,3 +83,21 @@ model ProcesoTrazabilidad {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model Trabajador {
+  id        Int      @id @default(autoincrement())
+  nombres   String
+  dni       String   @unique
+  rol       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Cliente {
+  id               Int      @id @default(autoincrement())
+  dni_rut          String   @unique
+  nombre           String
+  persona_juridica Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

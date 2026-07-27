@@ -5,6 +5,8 @@ import trazabilidadRoutes from "../modules/trazabilidad/trazabilidad.routes";
 import lotesRoutes from "../modules/lotes/lotes.routes";
 import kpisRoutes from "../modules/kpis/kpis.routes";
 import authRoutes from "../modules/auth/auth.routes";
+import trabajadoresRoutes from "../modules/trabajadores/trabajadores.routes";
+import clientesRoutes from "../modules/clientes/clientes.routes";
 import { verifyToken } from "../middlewares/verifyToken";
 
 const router = Router();
@@ -24,5 +26,7 @@ router.use("/cosechas", cosechasRoutes);
 router.use("/trazabilidad", trazabilidadRoutes);
 router.use("/lotes", lotesRoutes);
 router.use("/kpis", kpisRoutes);
+router.use("/trabajadores", trabajadoresRoutes);
+router.use("/clientes", clientesRoutes);
 
-export default router;
+export default router;
