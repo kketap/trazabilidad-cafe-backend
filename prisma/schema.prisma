@@ -15,6 +15,7 @@ model Cosecha {
   lotes                String
   totalHectareas       Float
   tipoCosecha          String
+<<<<<<< HEAD
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   kilos_diarios        Float?
@@ -30,10 +31,31 @@ model Cosecha {
 model Lote {
   id                 Int           @id @default(autoincrement())
   codigo             String        @unique
+=======
+
+  trabajadorId        Int?
+  trabajador          Trabajador? @relation(fields: [trabajadorId], references: [id])
+  tipo_cosecha        String?
+  kilos_diarios       Float?
+  kilos_quincena      Float?
+  kilos_mensuales     Float?
+
+  procesos ProcesoTrazabilidad[]
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  cosechaLotes CosechaLote[]
+}
+
+model Lote {
+  id                 Int      @id @default(autoincrement())
+  codigo             String   @unique
+>>>>>>> de36ec36e6a7e9fbef2f70ab812edf8c8d616756
   nombre             String?
   hectareas          Float?
   ubicacion          String?
   observacion        String?
+<<<<<<< HEAD
   activo             Boolean       @default(true)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
@@ -41,6 +63,17 @@ model Lote {
   horas_oxidacion    Float?
   tipo_cafe          String        @default("comercial")
   cosechaLotes       CosechaLote[]
+=======
+  activo             Boolean  @default(true)
+  tipo_cafe          String   @default("comercial")
+  horas_oxidacion    Float?
+  horas_fermentacion Float?
+
+  cosechaLotes CosechaLote[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+>>>>>>> de36ec36e6a7e9fbef2f70ab812edf8c8d616756
 }
 
 model CosechaLote {
@@ -52,6 +85,17 @@ model CosechaLote {
   lote      Lote     @relation(fields: [loteId], references: [id])
 
   @@unique([cosechaId, loteId])
+}
+
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  nombre    String
+  rol       String   @default("ADMIN")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ProcesoTrazabilidad {
@@ -93,5 +137,29 @@ model Usuario {
   nombre    String
   rol       String   @default("ADMIN")
   createdAt DateTime @default(now())
+<<<<<<< HEAD
   updatedAt DateTime
 }
+=======
+  updatedAt DateTime @updatedAt
+}
+
+model Trabajador {
+  id        Int       @id @default(autoincrement())
+  nombres   String
+  dni       String    @unique
+  rol       String?
+  cosechas  Cosecha[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Cliente {
+  id               Int      @id @default(autoincrement())
+  dni_rut          String   @unique
+  nombre           String
+  persona_juridica Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+>>>>>>> de36ec36e6a7e9fbef2f70ab812edf8c8d616756
