@@ -17,21 +17,30 @@ model Cosecha {
   tipoCosecha          String
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
+  kilos_diarios        Float?
+  kilos_mensuales      Float?
+  kilos_quincena       Float?
+  tipo_cosecha         String?
+  trabajadorId         Int?
+  Trabajador           Trabajador?           @relation(fields: [trabajadorId], references: [id])
   cosechaLotes         CosechaLote[]
   procesos             ProcesoTrazabilidad[]
 }
 
 model Lote {
-  id           Int           @id @default(autoincrement())
-  codigo       String        @unique
-  nombre       String?
-  hectareas    Float?
-  ubicacion    String?
-  observacion  String?
-  activo       Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  cosechaLotes CosechaLote[]
+  id                 Int           @id @default(autoincrement())
+  codigo             String        @unique
+  nombre             String?
+  hectareas          Float?
+  ubicacion          String?
+  observacion        String?
+  activo             Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  horas_fermentacion Float?
+  horas_oxidacion    Float?
+  tipo_cafe          String        @default("comercial")
+  cosechaLotes       CosechaLote[]
 }
 
 model CosechaLote {
@@ -56,4 +65,33 @@ model ProcesoTrazabilidad {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   cosecha          Cosecha  @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
+}
+
+model Cliente {
+  id               Int      @id @default(autoincrement())
+  dni_rut          String   @unique
+  nombre           String
+  persona_juridica Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime
+}
+
+model Trabajador {
+  id        Int       @id @default(autoincrement())
+  nombres   String
+  dni       String    @unique
+  rol       String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime
+  Cosecha   Cosecha[]
+}
+
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  nombre    String
+  rol       String   @default("ADMIN")
+  createdAt DateTime @default(now())
+  updatedAt DateTime
 }
