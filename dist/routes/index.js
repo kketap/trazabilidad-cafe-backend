@@ -9,6 +9,10 @@ const cosechas_routes_1 = __importDefault(require("../modules/cosechas/cosechas.
 const trazabilidad_routes_1 = __importDefault(require("../modules/trazabilidad/trazabilidad.routes"));
 const lotes_routes_1 = __importDefault(require("../modules/lotes/lotes.routes"));
 const kpis_routes_1 = __importDefault(require("../modules/kpis/kpis.routes"));
+const auth_routes_1 = __importDefault(require("../modules/auth/auth.routes"));
+const trabajadores_routes_1 = __importDefault(require("../modules/trabajadores/trabajadores.routes"));
+const clientes_routes_1 = __importDefault(require("../modules/clientes/clientes.routes"));
+const verifyToken_1 = require("../middlewares/verifyToken");
 const router = (0, express_1.Router)();
 router.get("/health", (_req, res) => {
     res.json({
@@ -16,9 +20,13 @@ router.get("/health", (_req, res) => {
         service: "trazabilidad-cafe-backend",
     });
 });
+router.use("/auth", auth_routes_1.default);
+router.use(verifyToken_1.verifyToken);
 router.use("/cosechas", cosechas_routes_1.default);
 router.use("/trazabilidad", trazabilidad_routes_1.default);
 router.use("/lotes", lotes_routes_1.default);
 router.use("/kpis", kpis_routes_1.default);
+router.use("/trabajadores", trabajadores_routes_1.default);
+router.use("/clientes", clientes_routes_1.default);
 exports.default = router;
 //# sourceMappingURL=index.js.map

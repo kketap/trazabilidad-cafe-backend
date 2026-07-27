@@ -8,29 +8,59 @@ datasource db {
 }
 
 model Cosecha {
-  id                   Int                   @id @default(autoincrement())
+  id                   Int      @id @default(autoincrement())
   fecha                DateTime
   kilosCosechados      Float
   cantidadCosechadores Int
   lotes                String
   totalHectareas       Float
   tipoCosecha          String
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  cosechaLotes         CosechaLote[]
-  procesos             ProcesoTrazabilidad[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cosechaLotes        CosechaLote[]
+  cosechaTrabajadores CosechaTrabajador[]
+  procesos            ProcesoTrazabilidad[]
 }
 
 model Lote {
-  id           Int           @id @default(autoincrement())
-  codigo       String        @unique
-  nombre       String?
-  hectareas    Float?
-  ubicacion    String?
-  observacion  String?
-  activo       Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id Int @id @default(autoincrement())
+
+  codigo String  @unique
+  nombre String?
+
+  // Define cómo se genera o interpreta el código del lote.
+  // COMERCIAL -> CONV-001
+  // ESPECIAL -> ESC-001
+  // PERSONALIZADO -> código ingresado manualmente por el usuario.
+  tipoCodigo TipoCodigoLote @default(COMERCIAL)
+
+  // Estado productivo del lote dentro del flujo de café.
+  estado EstadoLote @default(EN_PROCESO)
+
+  // Kilos iniciales del lote al momento de crearlo.
+  kilosIniciales Float?
+
+  // Kilos actuales disponibles del lote.
+  kilosActuales Float?
+
+  // Saldo temporal cuando el lote se divide o queda un remanente.
+  saldoTemporal Float?
+
+  // Se dejan temporalmente por compatibilidad con datos antiguos.
+  hectareas Float?
+  ubicacion String?
+
+  observacion String?
+  activo      Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Procesos asociados directamente al lote.
+  procesos ProcesoTrazabilidad[]
+
   cosechaLotes CosechaLote[]
 }
 
@@ -39,21 +69,103 @@ model CosechaLote {
   cosechaId Int
   loteId    Int
   createdAt DateTime @default(now())
-  cosecha   Cosecha  @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
-  lote      Lote     @relation(fields: [loteId], references: [id])
+
+  cosecha Cosecha @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
+  lote    Lote    @relation(fields: [loteId], references: [id])
 
   @@unique([cosechaId, loteId])
 }
 
+model Trabajador {
+  id        Int     @id @default(autoincrement())
+  nombres   String
+  apellidos String?
+  dni       String  @unique
+  rol       String?
+  telefono  String?
+  activo    Boolean @default(true)
+
+  cosechaTrabajadores CosechaTrabajador[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CosechaTrabajador {
+  id             Int    @id @default(autoincrement())
+  cosechaId      Int
+  trabajadorId   Int
+  kilosAsignados Float?
+
+  cosecha    Cosecha    @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
+  trabajador Trabajador @relation(fields: [trabajadorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([cosechaId, trabajadorId])
+}
+
+model Usuario {
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  password String
+  nombre   String
+  rol      String @default("ADMIN")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model ProcesoTrazabilidad {
-  id               Int      @id @default(autoincrement())
-  fecha            DateTime
+  id Int @id @default(autoincrement())
+
+  codigo        String   @unique
+  fecha         DateTime
+  fechaInicio   DateTime
+  duracionHoras Float
+
   etapa            String
   kilosIngresados  Float
   kilosResultantes Float
   porcentajeMerma  Float
-  cosechaId        Int
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  cosecha          Cosecha  @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
+
+  cosechaId Int?
+  cosecha   Cosecha? @relation(fields: [cosechaId], references: [id], onDelete: SetNull)
+
+  loteId Int?
+  lote   Lote? @relation(fields: [loteId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Cliente {
+  id              Int     @id @default(autoincrement())
+  dniRut          String  @unique
+  nombre          String
+  personaJuridica Boolean @default(false)
+  telefono        String?
+  email           String?
+  direccion       String?
+  activo          Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ENUM LOTES
+enum TipoCodigoLote {
+  COMERCIAL
+  ESPECIAL
+  PERSONALIZADO
+}
+
+enum EstadoLote {
+  EN_PROCESO
+  EN_SECADO
+  EN_ALMACEN
+  TRILLADO
+  VENDIDO
+  CERRADO
+  INACTIVO
 }
