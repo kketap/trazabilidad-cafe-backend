@@ -22,6 +22,13 @@ model Cosecha {
   totalHectareas       Float
   tipoCosecha          String
 
+  trabajadorId        Int?
+  trabajador          Trabajador? @relation(fields: [trabajadorId], references: [id])
+  tipo_cosecha        String?
+  kilos_diarios       Float?
+  kilos_quincena      Float?
+  kilos_mensuales     Float?
+
   procesos ProcesoTrazabilidad[]
 
   createdAt    DateTime      @default(now())
@@ -30,13 +37,16 @@ model Cosecha {
 }
 
 model Lote {
-  id          Int     @id @default(autoincrement())
-  codigo      String  @unique
-  nombre      String?
-  hectareas   Float?
-  ubicacion   String?
-  observacion String?
-  activo      Boolean @default(true)
+  id                 Int      @id @default(autoincrement())
+  codigo             String   @unique
+  nombre             String?
+  hectareas          Float?
+  ubicacion          String?
+  observacion        String?
+  activo             Boolean  @default(true)
+  tipo_cafe          String   @default("comercial")
+  horas_oxidacion    Float?
+  horas_fermentacion Float?
 
   cosechaLotes CosechaLote[]
 
@@ -85,12 +95,13 @@ model ProcesoTrazabilidad {
 }
 
 model Trabajador {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   nombres   String
-  dni       String   @unique
+  dni       String    @unique
   rol       String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  cosechas  Cosecha[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Cliente {
