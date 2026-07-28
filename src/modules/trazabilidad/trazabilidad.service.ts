@@ -3,16 +3,21 @@ import { prisma } from "../../config/prisma";
 
 type ProcesoInput = {
     fecha: string;
-    cosechaId: number;
+    loteId?: number | null;
+    cosechaId?: number | null;
     etapa: string;
     kilosIngresados: number;
     kilosResultantes: number;
+    codigo?: string;
+    duracionHoras?: number;
+    fechaInicio?: string;
 };
 
 export async function listarProcesos() {
     return prisma.procesoTrazabilidad.findMany({
         include: {
             cosecha: true,
+            Lote: true,
         },
         orderBy: {
             fecha: "desc",
@@ -29,17 +34,26 @@ export async function crearProceso(data: ProcesoInput) {
             ? ((kilosIngresados - kilosResultantes) / kilosIngresados) * 100
             : 0;
 
+    const codigo = data.codigo || `PROC-${Date.now()}`;
+    const duracionHoras = data.duracionHoras !== undefined ? Number(data.duracionHoras) : 0;
+    const fechaInicio = data.fechaInicio ? new Date(data.fechaInicio) : new Date(data.fecha);
+
     return prisma.procesoTrazabilidad.create({
         data: {
             fecha: new Date(data.fecha),
-            cosechaId: Number(data.cosechaId),
+            loteId: data.loteId ? Number(data.loteId) : null,
+            cosechaId: data.cosechaId ? Number(data.cosechaId) : null,
             etapa: data.etapa,
             kilosIngresados,
             kilosResultantes,
             porcentajeMerma,
+            codigo,
+            duracionHoras,
+            fechaInicio,
         },
         include: {
             cosecha: true,
+            Lote: true,
         },
     });
 }
@@ -62,14 +76,19 @@ export async function actualizarProceso(id: number, data: Partial<ProcesoInput>)
         where: { id },
         data: {
             ...(data.fecha && { fecha: new Date(data.fecha) }),
-            ...(data.cosechaId !== undefined && { cosechaId: Number(data.cosechaId) }),
+            ...(data.loteId !== undefined && { loteId: data.loteId ? Number(data.loteId) : null }),
+            ...(data.cosechaId !== undefined && { cosechaId: data.cosechaId ? Number(data.cosechaId) : null }),
             ...(data.etapa !== undefined && { etapa: data.etapa }),
             ...(kilosIngresados !== undefined && { kilosIngresados }),
             ...(kilosResultantes !== undefined && { kilosResultantes }),
             ...(porcentajeMerma !== undefined && { porcentajeMerma }),
+            ...(data.codigo !== undefined && { codigo: data.codigo }),
+            ...(data.duracionHoras !== undefined && { duracionHoras: Number(data.duracionHoras) }),
+            ...(data.fechaInicio && { fechaInicio: new Date(data.fechaInicio) }),
         },
         include: {
             cosecha: true,
+            Lote: true,
         },
     });
 }

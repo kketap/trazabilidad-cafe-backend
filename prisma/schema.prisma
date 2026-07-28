@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,56 +8,48 @@ datasource db {
 }
 
 model Cosecha {
-  id                   Int      @id @default(autoincrement())
+  id                   Int                   @id @default(autoincrement())
   fecha                DateTime
   kilosCosechados      Float
   cantidadCosechadores Int
   lotes                String
   totalHectareas       Float
   tipoCosecha          String
-
-  trabajadorId        Int?
-  trabajador          Trabajador? @relation(fields: [trabajadorId], references: [id])
-  tipo_cosecha        String?
-  kilos_diarios       Float?
-  kilos_quincena      Float?
-  kilos_mensuales     Float?
-
-  procesos ProcesoTrazabilidad[]
-
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  cosechaLotes CosechaLote[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  cosechaLotes         CosechaLote[]
+  CosechaTrabajador    CosechaTrabajador[]
+  procesos             ProcesoTrazabilidad[]
 }
 
 model Lote {
-  id                 Int      @id @default(autoincrement())
-  codigo             String   @unique
-  nombre             String?
-  hectareas          Float?
-  ubicacion          String?
-  observacion        String?
-  activo             Boolean  @default(true)
-  tipo_cafe          String   @default("comercial")
-  horas_oxidacion    Float?
-  horas_fermentacion Float?
-
-  cosechaLotes CosechaLote[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  Int                   @id @default(autoincrement())
+  codigo              String                @unique
+  nombre              String?
+  hectareas           Float?
+  ubicacion           String?
+  observacion         String?
+  activo              Boolean               @default(true)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  estado              EstadoLote            @default(EN_PROCESO)
+  kilosActuales       Float?
+  kilosIniciales      Float?
+  saldoTemporal       Float?
+  tipoCodigo          TipoCodigoLote        @default(COMERCIAL)
+  cosechaLotes        CosechaLote[]
+  ProcesoTrazabilidad ProcesoTrazabilidad[]
+  secados             Secado[]
+  empaques            Empaque[]
 }
 
 model CosechaLote {
-  id Int @id @default(autoincrement())
-
+  id        Int      @id @default(autoincrement())
   cosechaId Int
-  cosecha   Cosecha @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
-
-  loteId Int
-  lote   Lote @relation(fields: [loteId], references: [id])
-
+  loteId    Int
   createdAt DateTime @default(now())
+  cosecha   Cosecha  @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
+  lote      Lote     @relation(fields: [loteId], references: [id])
 
   @@unique([cosechaId, loteId])
 }
@@ -74,7 +60,6 @@ model Usuario {
   password  String
   nombre    String
   rol       String   @default("ADMIN")
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -86,29 +71,96 @@ model ProcesoTrazabilidad {
   kilosIngresados  Float
   kilosResultantes Float
   porcentajeMerma  Float
-
-  cosechaId Int
-  cosecha   Cosecha @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  cosechaId        Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  loteId           Int?
+  codigo           String   @unique
+  duracionHoras    Float
+  fechaInicio      DateTime
+  cosecha          Cosecha? @relation(fields: [cosechaId], references: [id])
+  Lote             Lote?    @relation(fields: [loteId], references: [id])
 }
 
 model Trabajador {
-  id        Int       @id @default(autoincrement())
-  nombres   String
-  dni       String    @unique
-  rol       String?
-  cosechas  Cosecha[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id                Int                 @id @default(autoincrement())
+  nombres           String
+  dni               String              @unique
+  rol               String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  activo            Boolean             @default(true)
+  apellidos         String?
+  telefono          String?
+  CosechaTrabajador CosechaTrabajador[]
 }
 
 model Cliente {
-  id               Int      @id @default(autoincrement())
-  dni_rut          String   @unique
-  nombre           String
-  persona_juridica Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  nombre          String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  activo          Boolean  @default(true)
+  direccion       String?
+  dniRut          String   @unique
+  email           String?
+  personaJuridica Boolean  @default(false)
+  telefono        String?
 }
+
+model CosechaTrabajador {
+  id             Int        @id @default(autoincrement())
+  cosechaId      Int
+  trabajadorId   Int
+  kilosAsignados Float?
+  createdAt      DateTime   @default(now())
+  Cosecha        Cosecha    @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
+  Trabajador     Trabajador @relation(fields: [trabajadorId], references: [id])
+
+  @@unique([cosechaId, trabajadorId])
+}
+
+enum EstadoLote {
+  EN_PROCESO
+  EN_SECADO
+  EN_ALMACEN
+  TRILLADO
+  VENDIDO
+  CERRADO
+  INACTIVO
+}
+
+enum TipoCodigoLote {
+  COMERCIAL
+  ESPECIAL
+  PERSONALIZADO
+}
+
+model Secado {
+  id               Int       @id @default(autoincrement())
+  loteId           Int
+  fechaInicio      DateTime
+  fechaFin         DateTime?
+  kilosIngresados  Float
+  kilosResultantes Float
+  merma            Float
+  observaciones    String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  lote             Lote      @relation(fields: [loteId], references: [id])
+}
+
+model Empaque {
+  id               Int       @id @default(autoincrement())
+  loteId           Int
+  fechaInicio      DateTime
+  fechaFin         DateTime?
+  kilosIngresados  Float
+  kilosResultantes Float
+  merma            Float
+  observaciones    String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  lote             Lote      @relation(fields: [loteId], references: [id])
+}
+
