@@ -3,7 +3,7 @@ import { prisma } from "../../config/prisma";
 export type CosechaInput = {
     fecha: string;
     kilosCosechados: number;
-    cantidadCosechadores: number;
+    cantidadCosechadores?: number;
     lotes?: string;
     loteIds?: number[];
     totalHectareas: number;
@@ -13,6 +13,7 @@ export type CosechaInput = {
     kilos_diarios?: number;
     kilos_quincena?: number;
     kilos_mensuales?: number;
+    varietal?: string;
 };
 
 export function normalizeTipoCosecha(val?: string): string {
@@ -78,7 +79,6 @@ export async function crearCosecha(data: CosechaInput) {
         data: {
             fecha: new Date(data.fecha),
             kilosCosechados: Number(data.kilosCosechados),
-            cantidadCosechadores: Number(data.cantidadCosechadores),
             lotes: lotesTexto,
             totalHectareas: Number(data.totalHectareas),
             tipoCosecha: tipoCosechaFinal,
@@ -86,6 +86,7 @@ export async function crearCosecha(data: CosechaInput) {
             kilos_diarios: data.kilos_diarios !== undefined ? Number(data.kilos_diarios) : null,
             kilos_quincena: data.kilos_quincena !== undefined ? Number(data.kilos_quincena) : null,
             kilos_mensuales: data.kilos_mensuales !== undefined ? Number(data.kilos_mensuales) : null,
+            varietal: data.varietal,
 
             // Relación a través de la tabla intermedia
             CosechaTrabajador: {
@@ -132,9 +133,6 @@ export async function actualizarCosecha(id: number, data: Partial<CosechaInput>)
                 ...(data.kilosCosechados !== undefined && {
                     kilosCosechados: Number(data.kilosCosechados),
                 }),
-                ...(data.cantidadCosechadores !== undefined && {
-                    cantidadCosechadores: Number(data.cantidadCosechadores),
-                }),
                 ...(data.lotes !== undefined && { lotes: data.lotes }),
                 ...(data.totalHectareas !== undefined && {
                     totalHectareas: Number(data.totalHectareas),
@@ -152,6 +150,7 @@ export async function actualizarCosecha(id: number, data: Partial<CosechaInput>)
                 ...(data.kilos_mensuales !== undefined && {
                     kilos_mensuales: data.kilos_mensuales ? Number(data.kilos_mensuales) : null,
                 }),
+                ...(data.varietal !== undefined && { varietal: data.varietal }),
             },
         });
 

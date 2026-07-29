@@ -8,6 +8,7 @@ export type SecadoInput = {
     kilosIngresados: number;
     kilosResultantes: number;
     observaciones?: string | null;
+    perfilProceso?: string;
 };
 
 export async function listarSecados() {
@@ -53,6 +54,7 @@ export async function crearSecado(data: SecadoInput) {
                 kilosResultantes,
                 merma,
                 observaciones: data.observaciones || null,
+                perfilProceso: data.perfilProceso as any,
             },
             include: {
                 lote: true,
@@ -96,6 +98,7 @@ export async function actualizarSecado(id: number, data: Partial<SecadoInput>) {
                 kilosResultantes,
                 merma,
                 observaciones: data.observaciones !== undefined ? data.observaciones : undefined,
+                ...(data.perfilProceso !== undefined && { perfilProceso: data.perfilProceso as any }),
             },
             include: {
                 lote: true,

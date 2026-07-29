@@ -5,12 +5,14 @@ type ProcesoInput = {
     fecha: string;
     loteId?: number | null;
     cosechaId?: number | null;
-    etapa: string;
+    etapa?: string;
+    tipoProceso?: string;
     kilosIngresados: number;
-    kilosResultantes: number;
+    kilosResultantes?: number;
     codigo?: string;
     duracionHoras?: number;
     fechaInicio?: string;
+    fechaFin?: string;
 };
 
 export async function listarProcesos() {
@@ -25,18 +27,22 @@ export async function listarProcesos() {
     });
 }
 
+function calculateDurationHours(start?: string | Date | null, end?: string | Date | null, fallback: number = 0): number {
+    if (start && end) {
+        const diff = new Date(end).getTime() - new Date(start).getTime();
+        if (diff > 0) return diff / (1000 * 60 * 60);
+    }
+    return fallback;
+}
+
 export async function crearProceso(data: ProcesoInput) {
     const kilosIngresados = Number(data.kilosIngresados);
-    const kilosResultantes = Number(data.kilosResultantes);
-
-    const porcentajeMerma =
-        kilosIngresados > 0
-            ? ((kilosIngresados - kilosResultantes) / kilosIngresados) * 100
-            : 0;
 
     const codigo = data.codigo || `PROC-${Date.now()}`;
-    const duracionHoras = data.duracionHoras !== undefined ? Number(data.duracionHoras) : 0;
-    const fechaInicio = data.fechaInicio ? new Date(data.fechaInicio) : new Date(data.fecha);
+    const duracionHoras = calculateDurationHours(data.fechaInicio, data.fechaFin, data.duracionHoras !== undefined ? Number(data.duracionHoras) : 0);
+    const fechaInicio = data.fechaInicio ? new Date(data.fechaInicio) : undefined;
+    const fechaFin = data.fechaFin ? new Date(data.fechaFin) : undefined;
+    const tipoProcesoStr = data.tipoProceso as any;
 
     return prisma.procesoTrazabilidad.create({
         data: {
@@ -44,12 +50,12 @@ export async function crearProceso(data: ProcesoInput) {
             loteId: data.loteId ? Number(data.loteId) : null,
             cosechaId: data.cosechaId ? Number(data.cosechaId) : null,
             etapa: data.etapa,
+            tipoProceso: tipoProcesoStr,
             kilosIngresados,
-            kilosResultantes,
-            porcentajeMerma,
             codigo,
             duracionHoras,
             fechaInicio,
+            fechaFin,
         },
         include: {
             cosecha: true,
@@ -61,16 +67,10 @@ export async function crearProceso(data: ProcesoInput) {
 export async function actualizarProceso(id: number, data: Partial<ProcesoInput>) {
     const kilosIngresados =
         data.kilosIngresados !== undefined ? Number(data.kilosIngresados) : undefined;
-    const kilosResultantes =
-        data.kilosResultantes !== undefined ? Number(data.kilosResultantes) : undefined;
 
-    let porcentajeMerma: number | undefined;
-    if (kilosIngresados !== undefined && kilosResultantes !== undefined) {
-        porcentajeMerma =
-            kilosIngresados > 0
-                ? ((kilosIngresados - kilosResultantes) / kilosIngresados) * 100
-                : 0;
-    }
+    const duracionHoras = data.fechaInicio && data.fechaFin 
+        ? calculateDurationHours(data.fechaInicio, data.fechaFin) 
+        : (data.duracionHoras !== undefined ? Number(data.duracionHoras) : undefined);
 
     return prisma.procesoTrazabilidad.update({
         where: { id },
@@ -79,12 +79,12 @@ export async function actualizarProceso(id: number, data: Partial<ProcesoInput>)
             ...(data.loteId !== undefined && { loteId: data.loteId ? Number(data.loteId) : null }),
             ...(data.cosechaId !== undefined && { cosechaId: data.cosechaId ? Number(data.cosechaId) : null }),
             ...(data.etapa !== undefined && { etapa: data.etapa }),
+            ...(data.tipoProceso !== undefined && { tipoProceso: data.tipoProceso as any }),
             ...(kilosIngresados !== undefined && { kilosIngresados }),
-            ...(kilosResultantes !== undefined && { kilosResultantes }),
-            ...(porcentajeMerma !== undefined && { porcentajeMerma }),
             ...(data.codigo !== undefined && { codigo: data.codigo }),
-            ...(data.duracionHoras !== undefined && { duracionHoras: Number(data.duracionHoras) }),
-            ...(data.fechaInicio && { fechaInicio: new Date(data.fechaInicio) }),
+            ...(duracionHoras !== undefined && { duracionHoras }),
+            ...(data.fechaInicio !== undefined && { fechaInicio: data.fechaInicio ? new Date(data.fechaInicio) : null }),
+            ...(data.fechaFin !== undefined && { fechaFin: data.fechaFin ? new Date(data.fechaFin) : null }),
         },
         include: {
             cosecha: true,
@@ -123,23 +123,8 @@ export async function obtenerResumenTrazabilidad(filtros: ResumenFiltros = {}) {
         0,
     );
 
-    const totalResultante = procesos.reduce(
-        (total, proceso) => total + proceso.kilosResultantes,
-        0,
-    );
-
-    const mermaPromedio =
-        procesos.length > 0
-            ? procesos.reduce(
-                (total, proceso) => total + proceso.porcentajeMerma,
-                0,
-            ) / procesos.length
-            : 0;
-
     return {
         totalProcesos: procesos.length,
         totalIngresado,
-        totalResultante,
-        mermaPromedio,
     };
 }
