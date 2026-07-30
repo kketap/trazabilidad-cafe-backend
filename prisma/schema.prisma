@@ -37,6 +37,8 @@ model Lote {
   kilosIniciales      Float?
   saldoTemporal       Float?
   tipoCodigo          TipoCodigoLote        @default(COMERCIAL)
+  ordenTrillaId       String?
+  ordenTrilla         OrdenTrilla?          @relation(fields: [ordenTrillaId], references: [id])
   cosechaLotes        CosechaLote[]
   ProcesoTrazabilidad ProcesoTrazabilidad[]
   secados             Secado[]
@@ -177,4 +179,19 @@ model Empaque {
   updatedAt        DateTime  @updatedAt
   lote             Lote      @relation(fields: [loteId], references: [id])
 }
+
+model OrdenTrilla {
+  id            String    @id @default(uuid())
+  codigoTrilla  String    @unique
+  fechaDespacho DateTime
+  fechaIngreso  DateTime?
+  calidad       String?
+  tipoSaco      String?
+  kilosEnviados Float
+  kilosNetos    Float?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lotes         Lote[]
+}
+
 

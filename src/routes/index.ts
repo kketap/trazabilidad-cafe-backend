@@ -9,6 +9,7 @@ import trabajadoresRoutes from "../modules/trabajadores/trabajadores.routes";
 import clientesRoutes from "../modules/clientes/clientes.routes";
 import secadoRoutes from "../modules/secado/secado.routes";
 import empaqueRoutes from "../modules/empaque/empaque.routes";
+import trillaRoutes from "../modules/trilla/trilla.routes";
 import { verifyToken } from "../middlewares/verifyToken";
 
 const router = Router();
@@ -32,5 +33,6 @@ router.use("/trabajadores", trabajadoresRoutes);
 router.use("/clientes", clientesRoutes);
 router.use("/secado", secadoRoutes);
 router.use("/empaque", empaqueRoutes);
+router.use("/trilla", trillaRoutes);
 
 export default router;
