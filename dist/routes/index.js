@@ -8,7 +8,15 @@ const express_1 = require("express");
 const cosechas_routes_1 = __importDefault(require("../modules/cosechas/cosechas.routes"));
 const trazabilidad_routes_1 = __importDefault(require("../modules/trazabilidad/trazabilidad.routes"));
 const lotes_routes_1 = __importDefault(require("../modules/lotes/lotes.routes"));
-const secciones_routes_1 = __importDefault(require("../modules/secciones/secciones.routes"));
+const kpis_routes_1 = __importDefault(require("../modules/kpis/kpis.routes"));
+const auth_routes_1 = __importDefault(require("../modules/auth/auth.routes"));
+const trabajadores_routes_1 = __importDefault(require("../modules/trabajadores/trabajadores.routes"));
+const clientes_routes_1 = __importDefault(require("../modules/clientes/clientes.routes"));
+const secado_routes_1 = __importDefault(require("../modules/secado/secado.routes"));
+const empaque_routes_1 = __importDefault(require("../modules/empaque/empaque.routes"));
+const trilla_routes_1 = __importDefault(require("../modules/trilla/trilla.routes"));
+const ventas_routes_1 = __importDefault(require("../modules/ventas/ventas.routes"));
+const verifyToken_1 = require("../middlewares/verifyToken");
 const router = (0, express_1.Router)();
 router.get("/health", (_req, res) => {
     res.json({
@@ -16,9 +24,17 @@ router.get("/health", (_req, res) => {
         service: "trazabilidad-cafe-backend",
     });
 });
+router.use("/auth", auth_routes_1.default);
+router.use(verifyToken_1.verifyToken);
 router.use("/cosechas", cosechas_routes_1.default);
 router.use("/trazabilidad", trazabilidad_routes_1.default);
 router.use("/lotes", lotes_routes_1.default);
-router.use("/secciones", secciones_routes_1.default);
+router.use("/kpis", kpis_routes_1.default);
+router.use("/trabajadores", trabajadores_routes_1.default);
+router.use("/clientes", clientes_routes_1.default);
+router.use("/secado", secado_routes_1.default);
+router.use("/empaque", empaque_routes_1.default);
+router.use("/trilla", trilla_routes_1.default);
+router.use("/ventas", ventas_routes_1.default);
 exports.default = router;
 //# sourceMappingURL=index.js.map
