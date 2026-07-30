@@ -108,6 +108,7 @@ model Cliente {
   email           String?
   personaJuridica Boolean  @default(false)
   telefono        String?
+  ventas        Venta[]
 }
 
 model CosechaTrabajador {
@@ -192,6 +193,24 @@ model OrdenTrilla {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   lotes         Lote[]
+  ventas        Venta[]
+}
+
+model Venta {
+  id                String   @id @default(uuid())
+  fechaVenta        DateTime @default(now())
+  producto          String
+  kilosVendidos     Float
+  presentacionSacos String
+  precioVentaKilo   Float
+  precioCompra      Float?
+  numeroFactura     String?
+  numeroGuiaRemision String?
+  fincaOrigen       String?
+  clienteId         Int
+  cliente           Cliente @relation(fields: [clienteId], references: [id])
+  ordenTrillaId     String
+  ordenTrilla       OrdenTrilla @relation(fields: [ordenTrillaId], references: [id])
 }
 
 
