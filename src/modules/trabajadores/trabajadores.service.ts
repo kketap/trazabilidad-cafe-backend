@@ -24,9 +24,9 @@ export async function obtenerTrabajadorPorId(id: number) {
   return prisma.trabajador.findUnique({
     where: { id },
     include: {
-      cosechaTrabajadores: {
+      CosechaTrabajador: {
         include: {
-          cosecha: true,
+          Cosecha: true,
         },
       },
     },

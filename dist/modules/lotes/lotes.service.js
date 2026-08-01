@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listarLotes = listarLotes;
 exports.obtenerLotePorId = obtenerLotePorId;
+exports.generarCodigoPrincipalLote = generarCodigoPrincipalLote;
 exports.generarSiguienteCorrelativoLote = generarSiguienteCorrelativoLote;
 exports.crearLote = crearLote;
 exports.actualizarLote = actualizarLote;
@@ -18,36 +19,95 @@ async function listarLotes() {
 async function obtenerLotePorId(id) {
     return prisma_1.prisma.lote.findUnique({
         where: { id },
+        include: {
+            cosechaLotes: {
+                include: {
+                    cosecha: true,
+                },
+            },
+        },
     });
 }
 /**
- * Genera el siguiente código correlativo de saldo/sublote para un código base.
- * Ejemplo: si existe "ESC-001", la primera subdivisión será "ESC-001-1", luego "ESC-001-2".
+ * Genera el siguiente código principal según el tipo seleccionado.
+ *
+ * COMERCIAL -> CONV-001, CONV-002...
+ * ESPECIAL  -> ESC-001, ESC-002...
  */
-async function generarSiguienteCorrelativoLote(codigoBase) {
+async function generarCodigoPrincipalLote(tipoCodigo) {
+    const prefijo = tipoCodigo === "ESPECIAL" ? "ESC" : "CONV";
     const lotesExistentes = await prisma_1.prisma.lote.findMany({
         where: {
             codigo: {
-                startsWith: `${codigoBase}-`,
+                startsWith: `${prefijo}-`,
             },
         },
-        select: { codigo: true },
+        select: {
+            codigo: true,
+        },
+    });
+    const numerosUsados = lotesExistentes
+        .map((lote) => {
+        const partes = lote.codigo.split("-");
+        // Solo considera códigos principales como ESC-001 o CONV-001.
+        if (partes.length !== 2) {
+            return 0;
+        }
+        const numero = Number(partes[1]);
+        return Number.isNaN(numero) ? 0 : numero;
+    })
+        .filter((numero) => numero > 0);
+    const siguienteNumero = numerosUsados.length > 0 ? Math.max(...numerosUsados) + 1 : 1;
+    return `${prefijo}-${String(siguienteNumero).padStart(3, "0")}`;
+}
+/**
+ * Genera el siguiente sublote o saldo desde un código base.
+ *
+ * Ejemplo:
+ * ESC-001   -> ESC-001-1
+ * ESC-001   -> ESC-001-2
+ * CONV-001  -> CONV-001-1
+ */
+async function generarSiguienteCorrelativoLote(codigoBase) {
+    const codigoLimpio = codigoBase.trim();
+    const lotesExistentes = await prisma_1.prisma.lote.findMany({
+        where: {
+            codigo: {
+                startsWith: `${codigoLimpio}-`,
+            },
+        },
+        select: {
+            codigo: true,
+        },
     });
     if (lotesExistentes.length === 0) {
-        return `${codigoBase}-1`;
+        return `${codigoLimpio}-1`;
     }
     const numerosUsados = lotesExistentes
-        .map((l) => {
-        const partes = l.codigo.split("-");
-        const ultimoNum = parseInt(partes[partes.length - 1], 10);
-        return isNaN(ultimoNum) ? 0 : ultimoNum;
+        .map((lote) => {
+        const partes = lote.codigo.split("-");
+        const ultimoNumero = parseInt(partes[partes.length - 1], 10);
+        return Number.isNaN(ultimoNumero) ? 0 : ultimoNumero;
     })
-        .filter((n) => n > 0);
+        .filter((numero) => numero > 0);
     const maxNumero = numerosUsados.length > 0 ? Math.max(...numerosUsados) : 0;
-    return `${codigoBase}-${maxNumero + 1}`;
+    return `${codigoLimpio}-${maxNumero + 1}`;
 }
+/**
+ * Crea un lote productivo.
+ * Si el tipo es COMERCIAL o ESPECIAL y no viene código, lo genera automáticamente.
+ * Si el tipo es PERSONALIZADO, el código debe venir desde el formulario.
+ */
 async function crearLote(data) {
-    const tipoCafe = data.tipo_cafe || "comercial";
+    const tipoCodigo = data.tipoCodigo ?? "COMERCIAL";
+    if (tipoCodigo === "PERSONALIZADO" && !data.codigo?.trim()) {
+        throw new Error("Debe ingresar un código personalizado para el lote");
+    }
+    const codigo = data.codigo?.trim() ||
+        (await generarCodigoPrincipalLote(tipoCodigo));
+    const kilosIniciales = data.kilosIniciales !== undefined && data.kilosIniciales !== null
+        ? Number(data.kilosIniciales)
+        : null;
     return prisma_1.prisma.lote.create({
         data: {
             codigo,
@@ -68,13 +128,6 @@ async function crearLote(data) {
             ubicacion: data.ubicacion?.trim() || null,
             observacion: data.observacion?.trim() || null,
             activo: data.activo ?? true,
-            tipo_cafe: tipoCafe,
-            horas_oxidacion: tipoCafe === "especial" && data.horas_oxidacion !== undefined && data.horas_oxidacion !== null
-                ? Number(data.horas_oxidacion)
-                : null,
-            horas_fermentacion: tipoCafe === "especial" && data.horas_fermentacion !== undefined && data.horas_fermentacion !== null
-                ? Number(data.horas_fermentacion)
-                : null,
         },
     });
 }
@@ -82,7 +135,6 @@ async function crearLote(data) {
  * Actualiza un lote productivo.
  */
 async function actualizarLote(id, data) {
-    const tipoCafe = data.tipo_cafe;
     return prisma_1.prisma.lote.update({
         where: { id },
         data: {
@@ -122,13 +174,8 @@ async function actualizarLote(id, data) {
             ...(data.observacion !== undefined && {
                 observacion: data.observacion?.trim() || null,
             }),
-            ...(data.activo !== undefined && { activo: data.activo }),
-            ...(tipoCafe !== undefined && { tipo_cafe: tipoCafe }),
-            ...(data.horas_oxidacion !== undefined && {
-                horas_oxidacion: data.horas_oxidacion !== null ? Number(data.horas_oxidacion) : null,
-            }),
-            ...(data.horas_fermentacion !== undefined && {
-                horas_fermentacion: data.horas_fermentacion !== null ? Number(data.horas_fermentacion) : null,
+            ...(data.activo !== undefined && {
+                activo: data.activo,
             }),
         },
     });
