@@ -184,4 +184,26 @@ async function deleteProceso(req, res) {
         });
     }
 }
+async function updateProceso(req, res) {
+    try {
+        const id = Number(req.params.id);
+        const proceso = await (0, trazabilidad_service_1.actualizarProceso)(id, req.body);
+        res.json(proceso);
+    }
+    catch (error) {
+        console.error("Error actualizando proceso:", error);
+        res.status(400).json({ message: "Error actualizando proceso" });
+    }
+}
+async function deleteProceso(req, res) {
+    try {
+        const id = Number(req.params.id);
+        await (0, trazabilidad_service_1.eliminarProceso)(id);
+        res.json({ message: "Proceso eliminado correctamente" });
+    }
+    catch (error) {
+        console.error("Error eliminando proceso:", error);
+        res.status(400).json({ message: "Error eliminando proceso" });
+    }
+}
 //# sourceMappingURL=trazabilidad.controller.js.map

@@ -68,22 +68,12 @@ async function getTrabajadorById(req, res) {
 }
 async function createTrabajador(req, res) {
     try {
-        const { nombres, apellidos, dni, rol, telefono, activo } = req.body;
+        const { nombres, dni, rol } = req.body;
         if (!nombres || !dni) {
-            res.status(400).json({
-                ok: false,
-                message: "Los campos 'nombres' y 'dni' son requeridos",
-            });
+            res.status(400).json({ ok: false, message: "Los campos 'nombres' y 'dni' son requeridos" });
             return;
         }
-        const nuevoTrabajador = await trabajadoresService.crearTrabajador({
-            nombres,
-            apellidos,
-            dni,
-            rol,
-            telefono,
-            activo,
-        });
+        const nuevoTrabajador = await trabajadoresService.crearTrabajador({ nombres, dni, rol });
         res.status(201).json({ ok: true, data: nuevoTrabajador });
     }
     catch (error) {
@@ -101,15 +91,8 @@ async function updateTrabajador(req, res) {
             res.status(400).json({ ok: false, message: "ID de trabajador inválido" });
             return;
         }
-        const { nombres, apellidos, dni, rol, telefono, activo } = req.body;
-        const trabajadorActualizado = await trabajadoresService.actualizarTrabajador(id, {
-            nombres,
-            apellidos,
-            dni,
-            rol,
-            telefono,
-            activo,
-        });
+        const { nombres, dni, rol } = req.body;
+        const trabajadorActualizado = await trabajadoresService.actualizarTrabajador(id, { nombres, dni, rol });
         res.json({ ok: true, data: trabajadorActualizado });
     }
     catch (error) {

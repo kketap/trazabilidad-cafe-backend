@@ -1,28 +1,38 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.normalizeTipoCosecha = normalizeTipoCosecha;
 exports.listarCosechas = listarCosechas;
 exports.obtenerCosechaPorId = obtenerCosechaPorId;
 exports.crearCosecha = crearCosecha;
 exports.actualizarCosecha = actualizarCosecha;
 exports.eliminarCosecha = eliminarCosecha;
 exports.obtenerResumenCosechas = obtenerResumenCosechas;
-exports.obtenerReporteCosechas = obtenerReporteCosechas;
-// src/modules/cosechas/cosechas.service.ts
 const prisma_1 = require("../../config/prisma");
+function normalizeTipoCosecha(val) {
+    if (!val)
+        return "plena";
+    const lower = val.toLowerCase().trim();
+    if (lower === "manual")
+        return "plena";
+    if (lower === "rebusque")
+        return "rebusca";
+    if (lower === "selectiva")
+        return "selectiva";
+    return lower;
+}
 async function listarCosechas() {
     return prisma_1.prisma.cosecha.findMany({
         include: {
+            CosechaTrabajador: {
+                include: {
+                    Trabajador: true,
+                },
+            },
             cosechaLotes: {
                 include: {
                     lote: true,
                 },
             },
-            cosechaTrabajadores: {
-                include: {
-                    trabajador: true,
-                },
-            },
-            procesos: true,
         },
         orderBy: {
             fecha: "desc",
@@ -33,17 +43,16 @@ async function obtenerCosechaPorId(id) {
     return prisma_1.prisma.cosecha.findUnique({
         where: { id },
         include: {
+            CosechaTrabajador: {
+                include: {
+                    Trabajador: true,
+                },
+            },
             cosechaLotes: {
                 include: {
                     lote: true,
                 },
             },
-            cosechaTrabajadores: {
-                include: {
-                    trabajador: true,
-                },
-            },
-            procesos: true,
         },
     });
 }
@@ -54,34 +63,26 @@ async function crearCosecha(data) {
         (loteIds.length > 0
             ? `Lotes seleccionados: ${loteIds.join(", ")}`
             : "");
-    const cantidadCosechadores = data.cantidadCosechadores !== undefined
-        ? Number(data.cantidadCosechadores)
-        : trabajadores.length;
-    if (loteIds.length === 0) {
-        throw new Error("Debe seleccionar al menos un lote");
-    }
-    const lotesExistentes = await prisma_1.prisma.lote.findMany({
-        where: {
-            id: {
-                in: loteIds.map(Number),
-            },
-            activo: true,
-        },
-        select: {
-            id: true,
-        },
-    });
-    if (lotesExistentes.length !== loteIds.length) {
-        throw new Error("Uno o más lotes seleccionados no existen o están inactivos");
-    }
+    const rawTipo = data.tipo_cosecha || data.tipoCosecha;
+    const tipoCosechaFinal = normalizeTipoCosecha(rawTipo);
     return prisma_1.prisma.cosecha.create({
         data: {
             fecha: new Date(data.fecha),
             kilosCosechados: Number(data.kilosCosechados),
-            cantidadCosechadores,
             lotes: lotesTexto,
             totalHectareas: Number(data.totalHectareas),
-            tipoCosecha: data.tipoCosecha,
+            tipoCosecha: tipoCosechaFinal,
+            tipo_cosecha: tipoCosechaFinal,
+            kilos_diarios: data.kilos_diarios !== undefined ? Number(data.kilos_diarios) : null,
+            kilos_quincena: data.kilos_quincena !== undefined ? Number(data.kilos_quincena) : null,
+            kilos_mensuales: data.kilos_mensuales !== undefined ? Number(data.kilos_mensuales) : null,
+            varietal: data.varietal,
+            // Relación a través de la tabla intermedia
+            CosechaTrabajador: {
+                create: {
+                    trabajadorId: Number(data.trabajadorId),
+                },
+            },
             cosechaLotes: {
                 create: loteIds.map((loteId) => ({
                     lote: {
@@ -106,6 +107,11 @@ async function crearCosecha(data) {
             },
         },
         include: {
+            CosechaTrabajador: {
+                include: {
+                    Trabajador: true,
+                },
+            },
             cosechaLotes: {
                 include: {
                     lote: true,
@@ -122,8 +128,10 @@ async function crearCosecha(data) {
 }
 async function actualizarCosecha(id, data) {
     const loteIds = data.loteIds;
-    const trabajadores = data.trabajadores;
+    const rawTipo = data.tipo_cosecha || data.tipoCosecha;
+    const tipoCosechaFinal = rawTipo !== undefined ? normalizeTipoCosecha(rawTipo) : undefined;
     return prisma_1.prisma.$transaction(async (tx) => {
+        // Actualización de la entidad principal omitiendo trabajadorId
         await tx.cosecha.update({
             where: { id },
             data: {
@@ -133,20 +141,39 @@ async function actualizarCosecha(id, data) {
                 ...(data.kilosCosechados !== undefined && {
                     kilosCosechados: Number(data.kilosCosechados),
                 }),
-                ...(data.cantidadCosechadores !== undefined && {
-                    cantidadCosechadores: Number(data.cantidadCosechadores),
-                }),
-                ...(data.lotes !== undefined && {
-                    lotes: data.lotes,
-                }),
+                ...(data.lotes !== undefined && { lotes: data.lotes }),
                 ...(data.totalHectareas !== undefined && {
                     totalHectareas: Number(data.totalHectareas),
                 }),
-                ...(data.tipoCosecha !== undefined && {
-                    tipoCosecha: data.tipoCosecha,
+                ...(tipoCosechaFinal !== undefined && {
+                    tipoCosecha: tipoCosechaFinal,
+                    tipo_cosecha: tipoCosechaFinal,
                 }),
+                ...(data.kilos_diarios !== undefined && {
+                    kilos_diarios: data.kilos_diarios ? Number(data.kilos_diarios) : null,
+                }),
+                ...(data.kilos_quincena !== undefined && {
+                    kilos_quincena: data.kilos_quincena ? Number(data.kilos_quincena) : null,
+                }),
+                ...(data.kilos_mensuales !== undefined && {
+                    kilos_mensuales: data.kilos_mensuales ? Number(data.kilos_mensuales) : null,
+                }),
+                ...(data.varietal !== undefined && { varietal: data.varietal }),
             },
         });
+        // Reconstrucción de la relación con Trabajador si viene en el payload
+        if (data.trabajadorId !== undefined) {
+            await tx.cosechaTrabajador.deleteMany({
+                where: { cosechaId: id },
+            });
+            await tx.cosechaTrabajador.create({
+                data: {
+                    cosechaId: id,
+                    trabajadorId: Number(data.trabajadorId),
+                },
+            });
+        }
+        // Reconstrucción de la relación con Lotes
         if (loteIds !== undefined) {
             await tx.cosechaLote.deleteMany({
                 where: {
@@ -186,6 +213,11 @@ async function actualizarCosecha(id, data) {
         return tx.cosecha.findUnique({
             where: { id },
             include: {
+                CosechaTrabajador: {
+                    include: {
+                        Trabajador: true,
+                    },
+                },
                 cosechaLotes: {
                     include: {
                         lote: true,
@@ -218,23 +250,10 @@ async function obtenerResumenCosechas(filtros = {}) {
                 }
                 : {}),
         },
-    });
-    const kilosTotales = cosechas.reduce((total, cosecha) => total + cosecha.kilosCosechados, 0);
-    const totalHectareas = cosechas.reduce((total, cosecha) => total + cosecha.totalHectareas, 0);
-    const rendimiento = totalHectareas > 0 ? kilosTotales / totalHectareas : 0;
-    return {
-        totalCosechas: cosechas.length,
-        kilosTotales,
-        totalHectareas,
-        rendimiento,
-    };
-}
-async function obtenerReporteCosechas() {
-    const cosechas = await prisma_1.prisma.cosecha.findMany({
         include: {
-            cosechaTrabajadores: {
+            CosechaTrabajador: {
                 include: {
-                    trabajador: true,
+                    Trabajador: true,
                 },
             },
             cosechaLotes: {
@@ -243,74 +262,62 @@ async function obtenerReporteCosechas() {
                 },
             },
         },
-        orderBy: {
-            fecha: "asc",
-        },
     });
-    const porDia = new Map();
-    const porMes = new Map();
-    const porQuincena = new Map();
-    const porTipoCosecha = new Map();
-    const porTrabajador = new Map();
-    const porLote = new Map();
-    for (const cosecha of cosechas) {
-        const fecha = new Date(cosecha.fecha);
-        const diaKey = fecha.toISOString().slice(0, 10);
-        const mesKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, "0")}`;
-        const quincenaKey = `${mesKey}-Q${fecha.getDate() <= 15 ? "1" : "2"}`;
-        porDia.set(diaKey, (porDia.get(diaKey) ?? 0) + cosecha.kilosCosechados);
-        porMes.set(mesKey, (porMes.get(mesKey) ?? 0) + cosecha.kilosCosechados);
-        porQuincena.set(quincenaKey, (porQuincena.get(quincenaKey) ?? 0) + cosecha.kilosCosechados);
-        porTipoCosecha.set(cosecha.tipoCosecha, (porTipoCosecha.get(cosecha.tipoCosecha) ?? 0) +
-            cosecha.kilosCosechados);
-        for (const item of cosecha.cosechaTrabajadores) {
-            const kilosTrabajador = item.kilosAsignados ?? cosecha.kilosCosechados / Math.max(cosecha.cosechaTrabajadores.length, 1);
-            const actual = porTrabajador.get(item.trabajadorId) ?? {
-                trabajadorId: item.trabajadorId,
-                nombre: `${item.trabajador.nombres}${item.trabajador.apellidos ? ` ${item.trabajador.apellidos}` : ""}`,
-                dni: item.trabajador.dni,
-                kilos: 0,
-                cosechas: 0,
-            };
-            actual.kilos += kilosTrabajador;
-            actual.cosechas += 1;
-            porTrabajador.set(item.trabajadorId, actual);
+    const kilosTotales = cosechas.reduce((total, cosecha) => total + cosecha.kilosCosechados, 0);
+    const totalHectareas = cosechas.reduce((total, cosecha) => total + cosecha.totalHectareas, 0);
+    const rendimiento = totalHectareas > 0 ? kilosTotales / totalHectareas : 0;
+    // Mejor trabajador
+    const trabajadorKilos = new Map();
+    for (const c of cosechas) {
+        for (const ct of c.CosechaTrabajador) {
+            if (ct.Trabajador) {
+                const tId = ct.Trabajador.id;
+                const cur = trabajadorKilos.get(tId) || {
+                    id: tId,
+                    nombre: `${ct.Trabajador.nombres}${ct.Trabajador.apellidos ? " " + ct.Trabajador.apellidos : ""}`,
+                    kilos: 0,
+                };
+                cur.kilos += c.kilosCosechados;
+                trabajadorKilos.set(tId, cur);
+            }
         }
-        for (const item of cosecha.cosechaLotes) {
-            const kilosLote = cosecha.cosechaLotes.length > 0
-                ? cosecha.kilosCosechados / cosecha.cosechaLotes.length
-                : cosecha.kilosCosechados;
-            const actual = porLote.get(item.loteId) ?? {
-                loteId: item.loteId,
-                codigo: item.lote.codigo,
-                nombre: item.lote.nombre,
-                kilos: 0,
-                cosechas: 0,
-            };
-            actual.kilos += kilosLote;
-            actual.cosechas += 1;
-            porLote.set(item.loteId, actual);
+    }
+    let mejorTrabajador = null;
+    for (const t of trabajadorKilos.values()) {
+        if (!mejorTrabajador || t.kilos > mejorTrabajador.kilos) {
+            mejorTrabajador = t;
+        }
+    }
+    // Mejor lote
+    const loteKilos = new Map();
+    for (const c of cosechas) {
+        for (const cl of c.cosechaLotes) {
+            if (cl.lote) {
+                const lId = cl.lote.id;
+                const cur = loteKilos.get(lId) || {
+                    id: lId,
+                    codigo: cl.lote.codigo,
+                    nombre: cl.lote.nombre,
+                    kilos: 0,
+                };
+                cur.kilos += c.kilosCosechados;
+                loteKilos.set(lId, cur);
+            }
+        }
+    }
+    let mejorLote = null;
+    for (const l of loteKilos.values()) {
+        if (!mejorLote || l.kilos > mejorLote.kilos) {
+            mejorLote = l;
         }
     }
     return {
-        porDia: Array.from(porDia.entries()).map(([fecha, kilos]) => ({
-            fecha,
-            kilos,
-        })),
-        porMes: Array.from(porMes.entries()).map(([mes, kilos]) => ({
-            mes,
-            kilos,
-        })),
-        porQuincena: Array.from(porQuincena.entries()).map(([quincena, kilos]) => ({
-            quincena,
-            kilos,
-        })),
-        porTipoCosecha: Array.from(porTipoCosecha.entries()).map(([tipoCosecha, kilos]) => ({
-            tipoCosecha,
-            kilos,
-        })),
-        porTrabajador: Array.from(porTrabajador.values()).sort((a, b) => b.kilos - a.kilos),
-        porLote: Array.from(porLote.values()).sort((a, b) => b.kilos - a.kilos),
+        totalCosechas: cosechas.length,
+        kilosTotales,
+        totalHectareas,
+        rendimiento,
+        mejorTrabajador,
+        mejorLote,
     };
 }
 //# sourceMappingURL=cosechas.service.js.map

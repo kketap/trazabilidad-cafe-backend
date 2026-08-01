@@ -6,7 +6,6 @@ const cosechas_controller_1 = require("./cosechas.controller");
 const router = (0, express_1.Router)();
 router.get("/", cosechas_controller_1.getCosechas);
 router.get("/resumen", cosechas_controller_1.getCosechasResumen);
-router.get("/reporte", cosechas_controller_1.getCosechasReporte);
 router.post("/", cosechas_controller_1.createCosecha);
 router.put("/:id", cosechas_controller_1.updateCosecha);
 router.delete("/:id", cosechas_controller_1.deleteCosecha);
