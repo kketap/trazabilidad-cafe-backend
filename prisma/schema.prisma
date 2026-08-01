@@ -8,18 +8,18 @@ datasource db {
 }
 
 model Cosecha {
-  id                   Int                   @id @default(autoincrement())
-  fecha                DateTime
-  kilosCosechados      Float
-  lotes                String
-  totalHectareas       Float
-  tipoCosecha          String
-  varietal             String?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  cosechaLotes         CosechaLote[]
-  CosechaTrabajador    CosechaTrabajador[]
-  procesos             ProcesoTrazabilidad[]
+  id                Int                   @id @default(autoincrement())
+  fecha             DateTime
+  kilosCosechados   Float
+  lotes             String
+  totalHectareas    Float
+  tipoCosecha       String
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  varietal          String?
+  cosechaLotes      CosechaLote[]
+  CosechaTrabajador CosechaTrabajador[]
+  procesos          ProcesoTrazabilidad[]
 }
 
 model Lote {
@@ -38,11 +38,11 @@ model Lote {
   saldoTemporal       Float?
   tipoCodigo          TipoCodigoLote        @default(COMERCIAL)
   ordenTrillaId       String?
-  ordenTrilla         OrdenTrilla?          @relation(fields: [ordenTrillaId], references: [id])
   cosechaLotes        CosechaLote[]
+  empaques            Empaque[]
+  ordenTrilla         OrdenTrilla?          @relation(fields: [ordenTrillaId], references: [id])
   ProcesoTrazabilidad ProcesoTrazabilidad[]
   secados             Secado[]
-  empaques            Empaque[]
 }
 
 model CosechaLote {
@@ -56,35 +56,6 @@ model CosechaLote {
   @@unique([cosechaId, loteId])
 }
 
-model Trabajador {
-  id        Int     @id @default(autoincrement())
-  nombres   String
-  apellidos String?
-  dni       String  @unique
-  rol       String?
-  telefono  String?
-  activo    Boolean @default(true)
-
-  cosechaTrabajadores CosechaTrabajador[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model CosechaTrabajador {
-  id             Int    @id @default(autoincrement())
-  cosechaId      Int
-  trabajadorId   Int
-  kilosAsignados Float?
-
-  cosecha    Cosecha    @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
-  trabajador Trabajador @relation(fields: [trabajadorId], references: [id])
-
-  createdAt DateTime @default(now())
-
-  @@unique([cosechaId, trabajadorId])
-}
-
 model Usuario {
   id        Int      @id @default(autoincrement())
   email     String   @unique
@@ -96,21 +67,21 @@ model Usuario {
 }
 
 model ProcesoTrazabilidad {
-  id               Int          @id @default(autoincrement())
-  fecha            DateTime
-  etapa            String?
-  tipoProceso      TipoProceso?
-  kilosIngresados  Float
-  cosechaId        Int?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
-  loteId           Int?
-  codigo           String       @unique
-  duracionHoras    Float
-  fechaInicio      DateTime?
-  fechaFin         DateTime?
-  cosecha          Cosecha?     @relation(fields: [cosechaId], references: [id])
-  Lote             Lote?        @relation(fields: [loteId], references: [id])
+  id              Int          @id @default(autoincrement())
+  fecha           DateTime
+  etapa           String?
+  kilosIngresados Float
+  cosechaId       Int?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  loteId          Int?
+  codigo          String       @unique
+  duracionHoras   Float
+  fechaInicio     DateTime?
+  fechaFin        DateTime?
+  tipoProceso     TipoProceso?
+  cosecha         Cosecha?     @relation(fields: [cosechaId], references: [id])
+  Lote            Lote?        @relation(fields: [loteId], references: [id])
 }
 
 model Trabajador {
@@ -137,7 +108,7 @@ model Cliente {
   email           String?
   personaJuridica Boolean  @default(false)
   telefono        String?
-  ventas        Venta[]
+  ventas          Venta[]
 }
 
 model CosechaTrabajador {
@@ -152,35 +123,6 @@ model CosechaTrabajador {
   @@unique([cosechaId, trabajadorId])
 }
 
-enum EstadoLote {
-  EN_PROCESO
-  EN_SECADO
-  EN_ALMACEN
-  TRILLADO
-  VENDIDO
-  CERRADO
-  INACTIVO
-}
-
-enum TipoCodigoLote {
-  COMERCIAL
-  ESPECIAL
-  PERSONALIZADO
-}
-
-enum PerfilSecado {
-  HONEY
-  NATURAL
-  LAVADO
-}
-
-enum TipoProceso {
-  OXIDACION_CEREZA
-  OXIDACION_MUCILAGO
-  ANAEROBICO_CEREZA
-  ANAEROBICO_MUCILAGO
-}
-
 model Secado {
   id               Int           @id @default(autoincrement())
   loteId           Int
@@ -190,9 +132,9 @@ model Secado {
   kilosResultantes Float
   merma            Float
   observaciones    String?
-  perfilProceso    PerfilSecado?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
+  perfilProceso    PerfilSecado?
   lote             Lote          @relation(fields: [loteId], references: [id])
 }
 
@@ -226,20 +168,47 @@ model OrdenTrilla {
 }
 
 model Venta {
-  id                String   @id @default(uuid())
-  fechaVenta        DateTime @default(now())
-  producto          String
-  kilosVendidos     Float
-  presentacionSacos String
-  precioVentaKilo   Float
-  precioCompra      Float?
-  numeroFactura     String?
+  id                 String      @id @default(uuid())
+  fechaVenta         DateTime    @default(now())
+  producto           String
+  kilosVendidos      Float
+  presentacionSacos  String
+  precioVentaKilo    Float
+  precioCompra       Float?
+  numeroFactura      String?
   numeroGuiaRemision String?
-  fincaOrigen       String?
-  clienteId         Int
-  cliente           Cliente @relation(fields: [clienteId], references: [id])
-  ordenTrillaId     String
-  ordenTrilla       OrdenTrilla @relation(fields: [ordenTrillaId], references: [id])
+  fincaOrigen        String?
+  clienteId          Int
+  ordenTrillaId      String
+  cliente            Cliente     @relation(fields: [clienteId], references: [id])
+  ordenTrilla        OrdenTrilla @relation(fields: [ordenTrillaId], references: [id])
 }
 
+enum EstadoLote {
+  EN_PROCESO
+  EN_SECADO
+  EN_ALMACEN
+  TRILLADO
+  VENDIDO
+  CERRADO
+  INACTIVO
+}
 
+enum TipoCodigoLote {
+  COMERCIAL
+  ESPECIAL
+  PERSONALIZADO
+}
+
+enum PerfilSecado {
+  HONEY
+  NATURAL
+  LAVADO
+}
+
+enum TipoProceso {
+  OXIDACION_CEREZA
+  OXIDACION_MUCILAGO
+  ANAEROBICO_CEREZA
+  ANAEROBICO_MUCILAGO
+}

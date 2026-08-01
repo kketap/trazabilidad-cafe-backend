@@ -9,7 +9,9 @@ exports.eliminarCliente = eliminarCliente;
 const prisma_1 = require("../../config/prisma");
 async function listarClientes() {
     return prisma_1.prisma.cliente.findMany({
-        orderBy: { createdAt: "desc" },
+        orderBy: {
+            createdAt: "desc",
+        },
     });
 }
 async function obtenerClientePorId(id) {
@@ -20,9 +22,9 @@ async function obtenerClientePorId(id) {
 async function crearCliente(input) {
     return prisma_1.prisma.cliente.create({
         data: {
-            dniRut: input.dni_rut,
+            dniRut: input.dniRut,
             nombre: input.nombre,
-            personaJuridica: input.persona_juridica ?? false,
+            personaJuridica: input.personaJuridica ?? false,
         },
     });
 }
@@ -30,15 +32,18 @@ async function actualizarCliente(id, input) {
     return prisma_1.prisma.cliente.update({
         where: { id },
         data: {
-            ...(input.dni_rut && { dniRut: input.dni_rut }),
+            ...(input.dniRut && { dniRut: input.dniRut }),
             ...(input.nombre && { nombre: input.nombre }),
-            ...(input.persona_juridica !== undefined && { personaJuridica: input.persona_juridica }),
+            ...(input.personaJuridica !== undefined && { personaJuridica: input.personaJuridica }),
         },
     });
 }
 async function eliminarCliente(id) {
-    return prisma_1.prisma.cliente.delete({
+    return prisma_1.prisma.cliente.update({
         where: { id },
+        data: {
+            activo: false,
+        },
     });
 }
 //# sourceMappingURL=clientes.service.js.map

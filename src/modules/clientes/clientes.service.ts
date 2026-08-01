@@ -30,9 +30,9 @@ export async function obtenerClientePorId(id: number) {
 export async function crearCliente(input: CreateClienteInput) {
   return prisma.cliente.create({
     data: {
-      dniRut: input.dni_rut,
+      dniRut: input.dniRut,
       nombre: input.nombre,
-      personaJuridica: input.persona_juridica ?? false,
+      personaJuridica: input.personaJuridica ?? false,
     },
   });
 }
@@ -41,9 +41,9 @@ export async function actualizarCliente(id: number, input: UpdateClienteInput) {
   return prisma.cliente.update({
     where: { id },
     data: {
-      ...(input.dni_rut && { dniRut: input.dni_rut }),
+      ...(input.dniRut && { dniRut: input.dniRut }),
       ...(input.nombre && { nombre: input.nombre }),
-      ...(input.persona_juridica !== undefined && { personaJuridica: input.persona_juridica }),
+      ...(input.personaJuridica !== undefined && { personaJuridica: input.personaJuridica }),
     },
   });
 }
