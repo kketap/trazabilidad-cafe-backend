@@ -60,246 +60,79 @@ const procesoInclude = {
  */
 async function listarProcesos() {
     return prisma_1.prisma.procesoTrazabilidad.findMany({
-        include: procesoInclude,
+        include: {
+            cosecha: true,
+            Lote: true,
+        },
         orderBy: {
             fecha: "desc",
         },
     });
 }
-function getDateRange(fecha) {
-    const desde = new Date(fecha);
-    desde.setHours(0, 0, 0, 0);
-    const hasta = new Date(desde);
-    hasta.setDate(hasta.getDate() + 1);
-    return { desde, hasta };
+function calculateDurationHours(start, end, fallback = 0) {
+    if (start && end) {
+        const diff = new Date(end).getTime() - new Date(start).getTime();
+        if (diff > 0)
+            return diff / (1000 * 60 * 60);
+    }
+    return fallback;
 }
-function buildProcesoCode(fecha, correlativo) {
-    const year = fecha.getFullYear();
-    const month = String(fecha.getMonth() + 1).padStart(2, "0");
-    const day = String(fecha.getDate()).padStart(2, "0");
-    return `PRO-${year}${month}${day}-${String(correlativo).padStart(4, "0")}`;
-}
-/**
- * Crea un proceso de trazabilidad.
- *
- * Reglas:
- * - Debe existir loteId o cosechaId.
- * - kilosResultantes no puede ser mayor a kilosIngresados.
- * - La merma se calcula automáticamente.
- */
 async function crearProceso(data) {
     const kilosIngresados = Number(data.kilosIngresados);
-    const kilosResultantes = Number(data.kilosResultantes);
-    const duracionHoras = Number(data.duracionHoras);
-    if (!data.loteId) {
-        throw new Error("Debe seleccionar un lote para registrar el proceso");
-    }
-    if (!Number.isFinite(kilosIngresados) || kilosIngresados <= 0) {
-        throw new Error("Los kilos ingresados deben ser mayores que cero");
-    }
-    if (!Number.isFinite(kilosResultantes) || kilosResultantes < 0) {
-        throw new Error("Los kilos resultantes no pueden ser negativos");
-    }
-    if (kilosResultantes > kilosIngresados) {
-        throw new Error("Los kilos resultantes no pueden ser mayores que los kilos ingresados");
-    }
-    if (!Number.isFinite(duracionHoras) || duracionHoras <= 0) {
-        throw new Error("La duración debe ser mayor que cero");
-    }
-    const fecha = new Date(data.fecha);
-    const fechaInicio = new Date(data.fechaInicio);
-    if (Number.isNaN(fecha.getTime())) {
-        throw new Error("La fecha del proceso no es válida");
-    }
-    if (Number.isNaN(fechaInicio.getTime())) {
-        throw new Error("La fecha de inicio no es válida");
-    }
-    const lote = await prisma_1.prisma.lote.findUnique({
-        where: {
-            id: Number(data.loteId),
+    const codigo = data.codigo || `PROC-${Date.now()}`;
+    const duracionHoras = calculateDurationHours(data.fechaInicio, data.fechaFin, data.duracionHoras !== undefined ? Number(data.duracionHoras) : 0);
+    const fechaInicio = data.fechaInicio ? new Date(data.fechaInicio) : undefined;
+    const fechaFin = data.fechaFin ? new Date(data.fechaFin) : undefined;
+    const tipoProcesoStr = data.tipoProceso;
+    return prisma_1.prisma.procesoTrazabilidad.create({
+        data: {
+            fecha: new Date(data.fecha),
+            loteId: data.loteId ? Number(data.loteId) : null,
+            cosechaId: data.cosechaId ? Number(data.cosechaId) : null,
+            etapa: data.etapa,
+            tipoProceso: tipoProcesoStr,
+            kilosIngresados,
+            codigo,
+            duracionHoras,
+            fechaInicio,
+            fechaFin,
         },
         include: {
-            cosechaLotes: {
-                include: {
-                    cosecha: true,
-                },
-            },
+            cosecha: true,
+            Lote: true,
         },
     });
-    if (!lote) {
-        throw new Error("El lote seleccionado no existe");
-    }
-    if (!lote.activo) {
-        throw new Error("El lote seleccionado se encuentra inactivo");
-    }
-    const fechaProcesoKey = getFechaKey(data.fecha);
-    const cosechaRelacionada = lote.cosechaLotes.find((relacion) => getFechaKey(relacion.cosecha.fecha) ===
-        fechaProcesoKey);
-    if (!cosechaRelacionada) {
-        throw new Error("El lote seleccionado no está asociado a una cosecha de la fecha indicada");
-    }
-    const kilosDisponibles = lote.kilosActuales ??
-        lote.kilosIniciales;
-    if (kilosDisponibles == null) {
-        throw new Error("El lote seleccionado no tiene kilos iniciales o actuales registrados");
-    }
-    const porcentajeMerma = calcularPorcentajeMerma(kilosIngresados, kilosResultantes);
-    const { desde, hasta } = getDateRange(fecha);
-    return prisma_1.prisma.$transaction(async (tx) => {
-        const cantidadProcesosDia = await tx.procesoTrazabilidad.count({
-            where: {
-                fecha: {
-                    gte: desde,
-                    lt: hasta,
-                },
-            },
-        });
-        let correlativo = cantidadProcesosDia + 1;
-        let codigo = buildProcesoCode(fecha, correlativo);
-        /*
-         * Evita fallos si anteriormente se eliminó algún proceso
-         * o si ya existe un correlativo determinado.
-         */
-        while (await tx.procesoTrazabilidad.findUnique({
-            where: {
-                codigo,
-            },
-            select: {
-                id: true,
-            },
-        })) {
-            correlativo += 1;
-            codigo = buildProcesoCode(fecha, correlativo);
-        }
-        return tx.procesoTrazabilidad.create({
-            data: {
-                codigo,
-                fecha,
-                fechaInicio,
-                duracionHoras,
-                etapa: data.etapa.trim(),
-                kilosIngresados,
-                kilosResultantes,
-                porcentajeMerma,
-                loteId: lote.id,
-                // Se obtiene automáticamente desde CosechaLote.
-                cosechaId: cosechaRelacionada.cosechaId,
-            },
-            include: procesoInclude,
-        });
-    });
 }
-/**
- * Actualiza un proceso de trazabilidad.
- *
- * Si cambian kilosIngresados o kilosResultantes, se recalcula la merma.
- * Si solo cambia fecha, etapa o lote, mantiene la merma anterior.
- */
 async function actualizarProceso(id, data) {
-    const procesoActual = await prisma_1.prisma.procesoTrazabilidad.findUnique({
-        where: { id },
-    });
-    if (!procesoActual) {
-        throw new Error("Proceso no encontrado");
-    }
-    const kilosIngresados = data.kilosIngresados !== undefined
-        ? Number(data.kilosIngresados)
-        : procesoActual.kilosIngresados;
-    const kilosResultantes = data.kilosResultantes !== undefined
-        ? Number(data.kilosResultantes)
-        : procesoActual.kilosResultantes;
-    const duracionHoras = data.duracionHoras !== undefined
-        ? Number(data.duracionHoras)
-        : procesoActual.duracionHoras;
-    if (kilosIngresados <= 0) {
-        throw new Error("Los kilos ingresados deben ser mayores que cero");
-    }
-    if (kilosResultantes < 0) {
-        throw new Error("Los kilos resultantes no pueden ser negativos");
-    }
-    if (kilosResultantes > kilosIngresados) {
-        throw new Error("Los kilos resultantes no pueden ser mayores que los kilos ingresados");
-    }
-    if (duracionHoras !== null && duracionHoras <= 0) {
-        throw new Error("La duración debe ser mayor que cero");
-    }
-    const loteId = data.loteId !== undefined
-        ? data.loteId
-        : procesoActual.loteId;
-    let cosechaId = procesoActual.cosechaId;
-    if (loteId) {
-        const lote = await prisma_1.prisma.lote.findUnique({
-            where: {
-                id: Number(loteId),
-            },
-            include: {
-                cosechaLotes: {
-                    include: {
-                        cosecha: true,
-                    },
-                },
-            },
-        });
-        if (!lote) {
-            throw new Error("El lote seleccionado no existe");
-        }
-        const fechaReferenciaKey = data.fecha
-            ? getFechaKey(data.fecha)
-            : getFechaKey(procesoActual.fecha);
-        const relacionCosecha = lote.cosechaLotes.find((relacion) => getFechaKey(relacion.cosecha.fecha) ===
-            fechaReferenciaKey);
-        if (!relacionCosecha) {
-            throw new Error("El lote no está asociado a una cosecha de la fecha seleccionada");
-        }
-        cosechaId = relacionCosecha.cosechaId;
-    }
-    const debeRecalcularMerma = data.kilosIngresados !== undefined ||
-        data.kilosResultantes !== undefined;
+    const kilosIngresados = data.kilosIngresados !== undefined ? Number(data.kilosIngresados) : undefined;
+    const duracionHoras = data.fechaInicio && data.fechaFin
+        ? calculateDurationHours(data.fechaInicio, data.fechaFin)
+        : (data.duracionHoras !== undefined ? Number(data.duracionHoras) : undefined);
     return prisma_1.prisma.procesoTrazabilidad.update({
         where: { id },
         data: {
-            ...(data.fecha !== undefined && {
-                fecha: new Date(data.fecha),
-            }),
-            ...(data.fechaInicio !== undefined && {
-                fechaInicio: new Date(data.fechaInicio),
-            }),
-            ...(data.duracionHoras !== undefined && {
-                duracionHoras,
-            }),
-            ...(data.etapa !== undefined && {
-                etapa: data.etapa.trim(),
-            }),
-            ...(data.loteId !== undefined && {
-                loteId: data.loteId !== null
-                    ? Number(data.loteId)
-                    : null,
-            }),
-            cosechaId,
-            ...(data.kilosIngresados !== undefined && {
-                kilosIngresados,
-            }),
-            ...(data.kilosResultantes !== undefined && {
-                kilosResultantes,
-            }),
-            ...(debeRecalcularMerma && {
-                porcentajeMerma: calcularPorcentajeMerma(kilosIngresados, kilosResultantes),
-            }),
+            ...(data.fecha && { fecha: new Date(data.fecha) }),
+            ...(data.loteId !== undefined && { loteId: data.loteId ? Number(data.loteId) : null }),
+            ...(data.cosechaId !== undefined && { cosechaId: data.cosechaId ? Number(data.cosechaId) : null }),
+            ...(data.etapa !== undefined && { etapa: data.etapa }),
+            ...(data.tipoProceso !== undefined && { tipoProceso: data.tipoProceso }),
+            ...(kilosIngresados !== undefined && { kilosIngresados }),
+            ...(data.codigo !== undefined && { codigo: data.codigo }),
+            ...(duracionHoras !== undefined && { duracionHoras }),
+            ...(data.fechaInicio !== undefined && { fechaInicio: data.fechaInicio ? new Date(data.fechaInicio) : null }),
+            ...(data.fechaFin !== undefined && { fechaFin: data.fechaFin ? new Date(data.fechaFin) : null }),
         },
-        include: procesoInclude,
+        include: {
+            cosecha: true,
+            Lote: true,
+        },
     });
 }
-/**
- * Elimina un proceso de trazabilidad.
- */
 async function eliminarProceso(id) {
     return prisma_1.prisma.procesoTrazabilidad.delete({
         where: { id },
     });
 }
-/**
- * Obtiene resumen de trazabilidad para Home y métricas.
- */
 async function obtenerResumenTrazabilidad(filtros = {}) {
     const procesos = await prisma_1.prisma.procesoTrazabilidad.findMany({
         where: {
@@ -314,15 +147,9 @@ async function obtenerResumenTrazabilidad(filtros = {}) {
         },
     });
     const totalIngresado = procesos.reduce((total, proceso) => total + proceso.kilosIngresados, 0);
-    const totalResultante = procesos.reduce((total, proceso) => total + proceso.kilosResultantes, 0);
-    const mermaPromedio = procesos.length > 0
-        ? procesos.reduce((total, proceso) => total + proceso.porcentajeMerma, 0) / procesos.length
-        : 0;
     return {
         totalProcesos: procesos.length,
         totalIngresado,
-        totalResultante,
-        mermaPromedio,
     };
 }
 //# sourceMappingURL=trazabilidad.service.js.map
