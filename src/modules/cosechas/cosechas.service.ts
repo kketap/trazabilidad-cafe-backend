@@ -9,7 +9,6 @@ export type CosechaTrabajadorInput = {
 export type CosechaInput = {
     fecha: string;
     kilosCosechados: number;
-    cantidadCosechadores?: number;
 
     lotes?: string;
     loteIds?: number[];
@@ -31,6 +30,7 @@ export type CosechaInput = {
     kilos_mensuales?: number;
 
     varietal?: string | string[] | null;
+    observacion?: string | null;
 };
 
 type ResumenFiltros = {
@@ -76,8 +76,44 @@ function buildTrabajadoresInput(data: CosechaInput): CosechaTrabajadorInput[] {
     return [];
 }
 
+function normalizeCosechaResponse<T extends Record<string, any>>(
+    cosecha: T | null,
+) {
+    if (!cosecha) {
+        return null;
+    }
+
+    const relacionesTrabajadores = Array.isArray(
+        cosecha.CosechaTrabajador,
+    )
+        ? cosecha.CosechaTrabajador
+        : [];
+
+    const cosechaTrabajadores = relacionesTrabajadores.map(
+        (relacion: any) => ({
+            id: relacion.id,
+            cosechaId: relacion.cosechaId,
+            trabajadorId: relacion.trabajadorId,
+            kilosAsignados: relacion.kilosAsignados,
+            createdAt: relacion.createdAt,
+            trabajador: relacion.Trabajador ?? null,
+        }),
+    );
+
+    const {
+        CosechaTrabajador: _cosechaTrabajador,
+        ...rest
+    } = cosecha;
+
+    return {
+        ...rest,
+        cosechaTrabajadores,
+        cantidadCosechadores: cosechaTrabajadores.length,
+    };
+}
+
 export async function listarCosechas() {
-    return prisma.cosecha.findMany({
+    const cosechas = await prisma.cosecha.findMany({
         include: {
             CosechaTrabajador: {
                 include: {
@@ -95,6 +131,10 @@ export async function listarCosechas() {
             fecha: "desc",
         },
     });
+
+    return cosechas.map((cosecha) =>
+        normalizeCosechaResponse(cosecha),
+    );
 }
 
 export async function obtenerCosechaPorId(id: number) {
@@ -129,7 +169,7 @@ export async function crearCosecha(data: CosechaInput) {
     const rawTipo = data.tipo_cosecha || data.tipoCosecha;
     const tipoCosechaFinal = normalizeTipoCosecha(rawTipo);
 
-    return prisma.cosecha.create({
+    const cosecha = await prisma.cosecha.create({
         data: {
             fecha: new Date(data.fecha),
             kilosCosechados: Number(data.kilosCosechados),
@@ -137,6 +177,7 @@ export async function crearCosecha(data: CosechaInput) {
             totalHectareas: Number(data.totalHectareas),
             tipoCosecha: tipoCosechaFinal,
             varietal: normalizeVarietal(data.varietal),
+            observacion: data.observacion?.trim() || null,
 
             cosechaLotes:
                 loteIds.length > 0
@@ -185,6 +226,8 @@ export async function crearCosecha(data: CosechaInput) {
             procesos: true,
         },
     });
+
+    return normalizeCosechaResponse(cosecha);
 }
 
 export async function actualizarCosecha(
@@ -219,6 +262,9 @@ export async function actualizarCosecha(
                 }),
                 ...(data.varietal !== undefined && {
                     varietal: normalizeVarietal(data.varietal),
+                }),
+                ...(data.observacion !== undefined && {
+                    observacion: data.observacion?.trim() || null,
                 }),
             },
         });
@@ -285,8 +331,10 @@ export async function actualizarCosecha(
             });
         }
 
-        return tx.cosecha.findUnique({
-            where: { id },
+        const cosechaActualizada = await tx.cosecha.findUnique({
+            where: {
+                id,
+            },
             include: {
                 CosechaTrabajador: {
                     include: {
@@ -301,12 +349,40 @@ export async function actualizarCosecha(
                 procesos: true,
             },
         });
+
+        return normalizeCosechaResponse(cosechaActualizada);
     });
 }
 
 export async function eliminarCosecha(id: number) {
+    const cosecha = await prisma.cosecha.findUnique({
+        where: {
+            id,
+        },
+        select: {
+            id: true,
+            _count: {
+                select: {
+                    procesos: true,
+                },
+            },
+        },
+    });
+
+    if (!cosecha) {
+        throw new Error("Cosecha no encontrada");
+    }
+
+    if (cosecha._count.procesos > 0) {
+        throw new Error(
+            "No se puede eliminar la cosecha porque tiene procesos asociados",
+        );
+    }
+
     return prisma.cosecha.delete({
-        where: { id },
+        where: {
+            id,
+        },
     });
 }
 
@@ -374,8 +450,8 @@ export async function obtenerResumenCosechas(filtros: ResumenFiltros = {}) {
             const actual = trabajadorKilos.get(trabajadorId) ?? {
                 id: trabajadorId,
                 nombre: `${item.Trabajador.nombres}${item.Trabajador.apellidos
-                        ? ` ${item.Trabajador.apellidos}`
-                        : ""
+                    ? ` ${item.Trabajador.apellidos}`
+                    : ""
                     }`,
                 kilos: 0,
             };
@@ -542,8 +618,8 @@ export async function obtenerReporteCosechas() {
             const actual = porTrabajadorMap.get(item.trabajadorId) ?? {
                 trabajadorId: item.trabajadorId,
                 nombre: `${item.Trabajador.nombres}${item.Trabajador.apellidos
-                        ? ` ${item.Trabajador.apellidos}`
-                        : ""
+                    ? ` ${item.Trabajador.apellidos}`
+                    : ""
                     }`,
                 dni: item.Trabajador.dni,
                 kilos: 0,

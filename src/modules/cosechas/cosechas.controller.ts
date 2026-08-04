@@ -28,21 +28,53 @@ export async function getCosechas(_req: Request, res: Response) {
     }
 }
 
-export async function createCosecha(req: Request, res: Response) {
+export async function createCosecha(
+    req: Request,
+    res: Response,
+) {
     try {
         const {
             fecha,
             kilosCosechados,
-            cantidadCosechadores,
+            totalHectareas,
             tipoCosecha,
             loteIds,
+            lotes,
             trabajadores,
+            varietal,
+            observacion,
         } = req.body;
 
-        if (!fecha || kilosCosechados === undefined) {
+        if (!fecha) {
             res.status(400).json({
                 ok: false,
-                message: "Los campos 'fecha' y 'kilosCosechados' son requeridos",
+                message: "El campo 'fecha' es requerido",
+            });
+            return;
+        }
+
+        if (
+            kilosCosechados === undefined ||
+            !Number.isFinite(Number(kilosCosechados)) ||
+            Number(kilosCosechados) <= 0
+        ) {
+            res.status(400).json({
+                ok: false,
+                message:
+                    "El campo 'kilosCosechados' debe ser mayor que cero",
+            });
+            return;
+        }
+
+        if (
+            totalHectareas === undefined ||
+            !Number.isFinite(Number(totalHectareas)) ||
+            Number(totalHectareas) <= 0
+        ) {
+            res.status(400).json({
+                ok: false,
+                message:
+                    "El campo 'totalHectareas' debe ser mayor que cero",
             });
             return;
         }
@@ -63,48 +95,208 @@ export async function createCosecha(req: Request, res: Response) {
             return;
         }
 
-        if (trabajadores !== undefined && !Array.isArray(trabajadores)) {
+        if (
+            trabajadores !== undefined &&
+            !Array.isArray(trabajadores)
+        ) {
             res.status(400).json({
                 ok: false,
-                message: "El campo 'trabajadores' debe ser una lista",
+                message:
+                    "El campo 'trabajadores' debe ser una lista",
             });
             return;
         }
 
         const cosecha = await crearCosecha({
-            ...req.body,
-            cantidadCosechadores: Number(
-                cantidadCosechadores ??
-                (Array.isArray(trabajadores) ? trabajadores.length : 0),
-            ),
+            fecha: String(fecha),
+            kilosCosechados: Number(kilosCosechados),
+            totalHectareas: Number(totalHectareas),
+            tipoCosecha: String(tipoCosecha),
+
+            loteIds: loteIds.map((id: unknown) => Number(id)),
+            lotes:
+                lotes !== undefined
+                    ? String(lotes)
+                    : undefined,
+
+            trabajadores: Array.isArray(trabajadores)
+                ? trabajadores.map((item: any) => ({
+                    trabajadorId: Number(item.trabajadorId),
+                    kilosAsignados:
+                        item.kilosAsignados != null
+                            ? Number(item.kilosAsignados)
+                            : null,
+                }))
+                : [],
+
+            varietal: varietal ?? null,
+
+            observacion:
+                observacion !== undefined &&
+                    observacion !== null
+                    ? String(observacion)
+                    : null,
         });
 
-        res.status(201).json({ ok: true, data: cosecha });
+        res.status(201).json({
+            ok: true,
+            data: cosecha,
+        });
     } catch (error: any) {
         console.error("Error creando cosecha:", error);
+
         res.status(400).json({
             ok: false,
-            message: error.message || "Error creando cosecha",
+            message:
+                error.message || "Error creando cosecha",
         });
     }
 }
 
-export async function updateCosecha(req: Request, res: Response) {
+export async function updateCosecha(
+    req: Request,
+    res: Response,
+) {
     try {
         const id = Number(req.params.id);
-        if (isNaN(id)) {
-            res.status(400).json({ ok: false, message: "ID de cosecha inválido" });
+
+        if (Number.isNaN(id)) {
+            res.status(400).json({
+                ok: false,
+                message: "ID de cosecha inválido",
+            });
             return;
         }
 
-        const cosecha = await actualizarCosecha(id, req.body);
-        res.json({ ok: true, data: cosecha });
+        if (
+            req.body.kilosCosechados !== undefined &&
+            (
+                !Number.isFinite(
+                    Number(req.body.kilosCosechados),
+                ) ||
+                Number(req.body.kilosCosechados) <= 0
+            )
+        ) {
+            res.status(400).json({
+                ok: false,
+                message:
+                    "Los kilos cosechados deben ser mayores que cero",
+            });
+            return;
+        }
+
+        if (
+            req.body.totalHectareas !== undefined &&
+            (
+                !Number.isFinite(
+                    Number(req.body.totalHectareas),
+                ) ||
+                Number(req.body.totalHectareas) <= 0
+            )
+        ) {
+            res.status(400).json({
+                ok: false,
+                message:
+                    "El total de hectáreas debe ser mayor que cero",
+            });
+            return;
+        }
+
+        if (
+            req.body.loteIds !== undefined &&
+            (
+                !Array.isArray(req.body.loteIds) ||
+                req.body.loteIds.length === 0
+            )
+        ) {
+            res.status(400).json({
+                ok: false,
+                message: "Debe seleccionar al menos un lote",
+            });
+            return;
+        }
+
+        const cosecha = await actualizarCosecha(id, {
+            ...(req.body.fecha !== undefined && {
+                fecha: String(req.body.fecha),
+            }),
+
+            ...(req.body.kilosCosechados !== undefined && {
+                kilosCosechados: Number(
+                    req.body.kilosCosechados,
+                ),
+            }),
+
+            ...(req.body.totalHectareas !== undefined && {
+                totalHectareas: Number(
+                    req.body.totalHectareas,
+                ),
+            }),
+
+            ...(req.body.tipoCosecha !== undefined && {
+                tipoCosecha: String(
+                    req.body.tipoCosecha,
+                ),
+            }),
+
+            ...(req.body.lotes !== undefined && {
+                lotes: String(req.body.lotes),
+            }),
+
+            ...(req.body.loteIds !== undefined && {
+                loteIds: req.body.loteIds.map(
+                    (loteId: unknown) => Number(loteId),
+                ),
+            }),
+
+            ...(req.body.trabajadores !== undefined && {
+                trabajadores: req.body.trabajadores.map(
+                    (item: any) => ({
+                        trabajadorId: Number(
+                            item.trabajadorId,
+                        ),
+                        kilosAsignados:
+                            item.kilosAsignados != null
+                                ? Number(item.kilosAsignados)
+                                : null,
+                    }),
+                ),
+            }),
+
+            ...(req.body.varietal !== undefined && {
+                varietal: req.body.varietal,
+            }),
+
+            ...(req.body.observacion !== undefined && {
+                observacion:
+                    req.body.observacion !== null
+                        ? String(req.body.observacion)
+                        : null,
+            }),
+        });
+
+        res.json({
+            ok: true,
+            data: cosecha,
+        });
     } catch (error: any) {
         console.error("Error actualizando cosecha:", error);
-        res.status(400).json({ ok: false, message: error.message || "Error actualizando cosecha" });
+
+        const status =
+            error.code === "P2025"
+                ? 404
+                : 400;
+
+        res.status(status).json({
+            ok: false,
+            message:
+                error.code === "P2025"
+                    ? "Cosecha no encontrada"
+                    : error.message ||
+                    "Error actualizando cosecha",
+        });
     }
 }
-
 export async function deleteCosecha(req: Request, res: Response) {
     try {
         const id = Number(req.params.id);

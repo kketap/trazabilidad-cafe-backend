@@ -6,11 +6,13 @@ import {
   createCliente,
   updateCliente,
   deleteCliente,
+  getClientesActivos
 } from "./clientes.controller";
 
 const router = Router();
 
 router.get("/", getClientes);
+router.get("/activos", getClientesActivos,);
 router.get("/:id", getClienteById);
 router.post("/", createCliente);
 router.put("/:id", updateCliente);

@@ -38,6 +38,7 @@ exports.getClienteById = getClienteById;
 exports.createCliente = createCliente;
 exports.updateCliente = updateCliente;
 exports.deleteCliente = deleteCliente;
+exports.getClientesActivos = getClientesActivos;
 const clientesService = __importStar(require("./clientes.service"));
 async function getClientes(_req, res) {
     try {
@@ -89,13 +90,15 @@ async function createCliente(req, res) {
             return;
         }
         const nuevoCliente = await clientesService.crearCliente({
-            dniRut,
-            nombre,
-            personaJuridica,
+            dniRut: String(dniRut),
+            nombre: String(nombre),
+            personaJuridica: personaJuridica !== undefined
+                ? Boolean(personaJuridica)
+                : undefined,
             telefono,
             email,
             direccion,
-            activo,
+            activo: activo !== undefined ? Boolean(activo) : undefined,
         });
         res.status(201).json({ ok: true, data: nuevoCliente });
     }
@@ -104,6 +107,13 @@ async function createCliente(req, res) {
             res.status(400).json({
                 ok: false,
                 message: "El DNI/RUT ingresado ya existe",
+            });
+            return;
+        }
+        if (error.code === "P2025") {
+            res.status(404).json({
+                ok: false,
+                message: "Cliente no encontrado",
             });
             return;
         }
@@ -143,6 +153,13 @@ async function updateCliente(req, res) {
             });
             return;
         }
+        if (error.code === "P2025") {
+            res.status(404).json({
+                ok: false,
+                message: "Cliente no encontrado",
+            });
+            return;
+        }
         res.status(500).json({
             ok: false,
             message: error.message || "Error al actualizar cliente",
@@ -166,9 +183,35 @@ async function deleteCliente(req, res) {
         });
     }
     catch (error) {
+        if (error.code === "P2025") {
+            res.status(404).json({
+                ok: false,
+                message: "Cliente no encontrado",
+            });
+            return;
+        }
         res.status(500).json({
             ok: false,
             message: error.message || "Error al eliminar cliente",
+        });
+    }
+}
+/**
+ * Lista únicamente clientes activos para selectores y formularios.
+ */
+async function getClientesActivos(_req, res) {
+    try {
+        const clientes = await clientesService.listarClientesActivos();
+        res.json({
+            ok: true,
+            data: clientes,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            ok: false,
+            message: error.message ||
+                "Error al listar clientes activos",
         });
     }
 }

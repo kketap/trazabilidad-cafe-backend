@@ -17,6 +17,7 @@ model Cosecha {
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
   varietal          String?
+  observacion       String?
   cosechaLotes      CosechaLote[]
   CosechaTrabajador CosechaTrabajador[]
   procesos          ProcesoTrazabilidad[]
@@ -41,7 +42,7 @@ model Lote {
   cosechaLotes        CosechaLote[]
   empaques            Empaque[]
   ordenTrilla         OrdenTrilla?          @relation(fields: [ordenTrillaId], references: [id])
-  ProcesoTrazabilidad ProcesoTrazabilidad[]
+  procesosTrazabilidad ProcesoTrazabilidad[]
   secados             Secado[]
 }
 
@@ -71,6 +72,7 @@ model ProcesoTrazabilidad {
   fecha           DateTime
   etapa           String?
   kilosIngresados Float
+  kilosResultantes  Float?
   cosechaId       Int?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt

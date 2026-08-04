@@ -5,6 +5,7 @@ const express_1 = require("express");
 const clientes_controller_1 = require("./clientes.controller");
 const router = (0, express_1.Router)();
 router.get("/", clientes_controller_1.getClientes);
+router.get("/activos", clientes_controller_1.getClientesActivos);
 router.get("/:id", clientes_controller_1.getClienteById);
 router.post("/", clientes_controller_1.createCliente);
 router.put("/:id", clientes_controller_1.updateCliente);

@@ -45,8 +45,30 @@ function buildTrabajadoresInput(data) {
     }
     return [];
 }
+function normalizeCosechaResponse(cosecha) {
+    if (!cosecha) {
+        return null;
+    }
+    const relacionesTrabajadores = Array.isArray(cosecha.CosechaTrabajador)
+        ? cosecha.CosechaTrabajador
+        : [];
+    const cosechaTrabajadores = relacionesTrabajadores.map((relacion) => ({
+        id: relacion.id,
+        cosechaId: relacion.cosechaId,
+        trabajadorId: relacion.trabajadorId,
+        kilosAsignados: relacion.kilosAsignados,
+        createdAt: relacion.createdAt,
+        trabajador: relacion.Trabajador ?? null,
+    }));
+    const { CosechaTrabajador: _cosechaTrabajador, ...rest } = cosecha;
+    return {
+        ...rest,
+        cosechaTrabajadores,
+        cantidadCosechadores: cosechaTrabajadores.length,
+    };
+}
 async function listarCosechas() {
-    return prisma_1.prisma.cosecha.findMany({
+    const cosechas = await prisma_1.prisma.cosecha.findMany({
         include: {
             CosechaTrabajador: {
                 include: {
@@ -64,6 +86,7 @@ async function listarCosechas() {
             fecha: "desc",
         },
     });
+    return cosechas.map((cosecha) => normalizeCosechaResponse(cosecha));
 }
 async function obtenerCosechaPorId(id) {
     return prisma_1.prisma.cosecha.findUnique({
@@ -92,7 +115,7 @@ async function crearCosecha(data) {
             : "");
     const rawTipo = data.tipo_cosecha || data.tipoCosecha;
     const tipoCosechaFinal = normalizeTipoCosecha(rawTipo);
-    return prisma_1.prisma.cosecha.create({
+    const cosecha = await prisma_1.prisma.cosecha.create({
         data: {
             fecha: new Date(data.fecha),
             kilosCosechados: Number(data.kilosCosechados),
@@ -100,6 +123,7 @@ async function crearCosecha(data) {
             totalHectareas: Number(data.totalHectareas),
             tipoCosecha: tipoCosechaFinal,
             varietal: normalizeVarietal(data.varietal),
+            observacion: data.observacion?.trim() || null,
             cosechaLotes: loteIds.length > 0
                 ? {
                     create: loteIds.map((loteId) => ({
@@ -141,6 +165,7 @@ async function crearCosecha(data) {
             procesos: true,
         },
     });
+    return normalizeCosechaResponse(cosecha);
 }
 async function actualizarCosecha(id, data) {
     const loteIds = data.loteIds;
@@ -168,6 +193,9 @@ async function actualizarCosecha(id, data) {
                 }),
                 ...(data.varietal !== undefined && {
                     varietal: normalizeVarietal(data.varietal),
+                }),
+                ...(data.observacion !== undefined && {
+                    observacion: data.observacion?.trim() || null,
                 }),
             },
         });
@@ -222,8 +250,10 @@ async function actualizarCosecha(id, data) {
                 },
             });
         }
-        return tx.cosecha.findUnique({
-            where: { id },
+        const cosechaActualizada = await tx.cosecha.findUnique({
+            where: {
+                id,
+            },
             include: {
                 CosechaTrabajador: {
                     include: {
@@ -238,11 +268,33 @@ async function actualizarCosecha(id, data) {
                 procesos: true,
             },
         });
+        return normalizeCosechaResponse(cosechaActualizada);
     });
 }
 async function eliminarCosecha(id) {
+    const cosecha = await prisma_1.prisma.cosecha.findUnique({
+        where: {
+            id,
+        },
+        select: {
+            id: true,
+            _count: {
+                select: {
+                    procesos: true,
+                },
+            },
+        },
+    });
+    if (!cosecha) {
+        throw new Error("Cosecha no encontrada");
+    }
+    if (cosecha._count.procesos > 0) {
+        throw new Error("No se puede eliminar la cosecha porque tiene procesos asociados");
+    }
     return prisma_1.prisma.cosecha.delete({
-        where: { id },
+        where: {
+            id,
+        },
     });
 }
 async function obtenerResumenCosechas(filtros = {}) {
