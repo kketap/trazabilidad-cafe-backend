@@ -4,16 +4,32 @@ dotenv.config();
 
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import morgan from "morgan";
+
 import routes from "./routes";
 
 const app = express();
 
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  process.env.FRONTEND_LOCAL_URL,
-  process.env.FRONTEND_PRODUCTION_URL,
-].filter(Boolean) as string[];
+function parseOrigins(value?: string): string[] {
+  return (
+    value
+      ?.split(",")
+      .map((origin) => origin.trim().replace(/\/$/, ""))
+      .filter(Boolean) ?? []
+  );
+}
+
+const allowedOrigins = Array.from(
+  new Set([
+    "http://localhost:5173",
+    "http://localhost:4173",
+    ...parseOrigins(process.env.FRONTEND_URL),
+    ...parseOrigins(process.env.FRONTEND_LOCAL_URL),
+    ...parseOrigins(process.env.FRONTEND_PRODUCTION_URL),
+    ...parseOrigins(process.env.CORS_ORIGINS),
+  ]),
+);
 
 console.log("CORS allowed origins:", allowedOrigins);
 
@@ -21,21 +37,37 @@ app.use(
   cors({
     origin(origin, callback) {
       if (!origin) {
-        return callback(null, true);
+        callback(null, true);
+        return;
       }
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
+      const normalizedOrigin = origin.replace(/\/$/, "");
+
+      if (allowedOrigins.includes(normalizedOrigin)) {
+        callback(null, true);
+        return;
       }
 
-      return callback(new Error(`Origen no permitido por CORS: ${origin}`));
+      callback(
+        new Error(
+          `Origen no permitido por CORS: ${origin}`,
+        ),
+      );
     },
     credentials: true,
-  })
+  }),
 );
 
+app.use(cookieParser());
+
 app.use(express.json({ limit: "20mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "20mb",
+  }),
+);
+
 app.use(morgan("dev"));
 
 app.use("/api", routes);

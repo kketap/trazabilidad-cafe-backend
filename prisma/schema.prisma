@@ -24,26 +24,26 @@ model Cosecha {
 }
 
 model Lote {
-  id                  Int                   @id @default(autoincrement())
-  codigo              String                @unique
-  nombre              String?
-  hectareas           Float?
-  ubicacion           String?
-  observacion         String?
-  activo              Boolean               @default(true)
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  estado              EstadoLote            @default(EN_PROCESO)
-  kilosActuales       Float?
-  kilosIniciales      Float?
-  saldoTemporal       Float?
-  tipoCodigo          TipoCodigoLote        @default(COMERCIAL)
-  ordenTrillaId       String?
-  cosechaLotes        CosechaLote[]
-  empaques            Empaque[]
-  ordenTrilla         OrdenTrilla?          @relation(fields: [ordenTrillaId], references: [id])
+  id                   Int                   @id @default(autoincrement())
+  codigo               String                @unique
+  nombre               String?
+  hectareas            Float?
+  ubicacion            String?
+  observacion          String?
+  activo               Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  estado               EstadoLote            @default(EN_PROCESO)
+  kilosActuales        Float?
+  kilosIniciales       Float?
+  saldoTemporal        Float?
+  tipoCodigo           TipoCodigoLote        @default(COMERCIAL)
+  ordenTrillaId        String?
+  cosechaLotes         CosechaLote[]
+  empaques             Empaque[]
+  ordenTrilla          OrdenTrilla?          @relation(fields: [ordenTrillaId], references: [id])
   procesosTrazabilidad ProcesoTrazabilidad[]
-  secados             Secado[]
+  secados              Secado[]
 }
 
 model CosechaLote {
@@ -58,32 +58,47 @@ model CosechaLote {
 }
 
 model Usuario {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  nombre    String
-  rol       String   @default("ADMIN")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  password      String
+  nombre        String
+  rol           String         @default("ADMIN")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  usuarioId Int
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([expiresAt])
 }
 
 model ProcesoTrazabilidad {
-  id              Int          @id @default(autoincrement())
-  fecha           DateTime
-  etapa           String?
-  kilosIngresados Float
-  kilosResultantes  Float?
-  cosechaId       Int?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  loteId          Int?
-  codigo          String       @unique
-  duracionHoras   Float
-  fechaInicio     DateTime?
-  fechaFin        DateTime?
-  tipoProceso     TipoProceso?
-  cosecha         Cosecha?     @relation(fields: [cosechaId], references: [id])
-  Lote            Lote?        @relation(fields: [loteId], references: [id])
+  id               Int          @id @default(autoincrement())
+  fecha            DateTime
+  etapa            String?
+  kilosIngresados  Float
+  cosechaId        Int?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  loteId           Int?
+  codigo           String       @unique
+  duracionHoras    Float
+  fechaInicio      DateTime?
+  fechaFin         DateTime?
+  tipoProceso      TipoProceso?
+  kilosResultantes Float?
+  cosecha          Cosecha?     @relation(fields: [cosechaId], references: [id])
+  Lote             Lote?        @relation(fields: [loteId], references: [id])
 }
 
 model Trabajador {

@@ -8,5 +8,7 @@ const router = (0, express_1.Router)();
 router.post("/login", auth_controller_1.loginController);
 router.put("/perfil", verifyToken_1.verifyToken, auth_controller_1.actualizarPerfilController);
 router.put("/password", verifyToken_1.verifyToken, auth_controller_1.cambiarPasswordController);
+router.post("/refresh", auth_controller_1.refreshController);
+router.post("/logout", auth_controller_1.logoutController);
 exports.default = router;
 //# sourceMappingURL=auth.routes.js.map

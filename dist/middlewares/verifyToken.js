@@ -8,18 +8,45 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const JWT_SECRET = process.env.JWT_SECRET || "changeme";
 function verifyToken(req, res, next) {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        res.status(401).json({ message: "Token no proporcionado" });
+    if (!authHeader ||
+        !authHeader.startsWith("Bearer ")) {
+        res.status(401).json({
+            ok: false,
+            code: "TOKEN_MISSING",
+            message: "No se encontró una sesión válida. Inicia sesión nuevamente.",
+        });
         return;
     }
-    const token = authHeader.split(" ")[1];
+    const token = authHeader
+        .slice(7)
+        .trim();
+    if (!token) {
+        res.status(401).json({
+            ok: false,
+            code: "TOKEN_MISSING",
+            message: "No se encontró una sesión válida. Inicia sesión nuevamente.",
+        });
+        return;
+    }
     try {
         const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
         req.user = decoded;
         next();
     }
-    catch {
-        res.status(401).json({ message: "Token inválido o expirado" });
+    catch (error) {
+        if (error instanceof jsonwebtoken_1.default.TokenExpiredError) {
+            res.status(401).json({
+                ok: false,
+                code: "TOKEN_EXPIRED",
+                message: "Tu sesión ha expirado. Inicia sesión nuevamente.",
+            });
+            return;
+        }
+        res.status(401).json({
+            ok: false,
+            code: "TOKEN_INVALID",
+            message: "La sesión no es válida. Inicia sesión nuevamente.",
+        });
     }
 }
 //# sourceMappingURL=verifyToken.js.map
