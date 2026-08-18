@@ -5,6 +5,7 @@ import {
     eliminarCosecha,
     listarCosechas,
     obtenerResumenCosechas,
+    obtenerReporteCosechas,
     actualizarCosecha,
 } from "./cosechas.service";
 
@@ -96,3 +97,14 @@ export async function getCosechasResumen(req: Request, res: Response) {
         res.status(500).json({ ok: false, message: "Error obteniendo resumen de cosechas" });
     }
 }
+
+export async function getCosechasReporte(_req: Request, res: Response) {
+    try {
+        const reporte = await obtenerReporteCosechas();
+        res.json({ ok: true, data: reporte });
+    } catch (error: any) {
+        console.error("Error obteniendo reporte de cosechas:", error);
+        res.status(500).json({ ok: false, message: "Error obteniendo reporte de cosechas" });
+    }
+}
+

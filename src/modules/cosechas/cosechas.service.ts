@@ -311,3 +311,98 @@ export async function obtenerResumenCosechas(filtros: ResumenFiltros = {}) {
         mejorLote,
     };
 }
+
+export async function obtenerReporteCosechas() {
+    const cosechas = await prisma.cosecha.findMany({
+        orderBy: { fecha: "asc" },
+        include: {
+            CosechaTrabajador: {
+                include: {
+                    Trabajador: true,
+                },
+            },
+            cosechaLotes: {
+                include: {
+                    lote: true,
+                },
+            },
+        },
+    });
+
+    const diaMap = new Map<string, number>();
+    const mesMap = new Map<string, number>();
+    const quincenaMap = new Map<string, number>();
+    const tipoMap = new Map<string, number>();
+    const trabajadorMap = new Map<number, { trabajadorId: number; nombre: string; dni: string; kilos: number; cosechas: number }>();
+    const loteMap = new Map<number, { loteId: number; codigo: string; nombre: string | null; kilos: number; cosechas: number }>();
+
+    for (const c of cosechas) {
+        const fechaObj = new Date(c.fecha);
+        const yyyy = fechaObj.getFullYear();
+        const mm = String(fechaObj.getMonth() + 1).padStart(2, "0");
+        const dd = String(fechaObj.getDate()).padStart(2, "0");
+
+        const diaKey = `${yyyy}-${mm}-${dd}`;
+        diaMap.set(diaKey, (diaMap.get(diaKey) || 0) + c.kilosCosechados);
+
+        const mesKey = `${yyyy}-${mm}`;
+        mesMap.set(mesKey, (mesMap.get(mesKey) || 0) + c.kilosCosechados);
+
+        const dayNum = fechaObj.getDate();
+        const qNum = dayNum <= 15 ? 1 : 2;
+        const quincenaKey = `${yyyy}-${mm}-Q${qNum}`;
+        quincenaMap.set(quincenaKey, (quincenaMap.get(quincenaKey) || 0) + c.kilosCosechados);
+
+        const tipoKey = c.tipoCosecha || "No especificado";
+        tipoMap.set(tipoKey, (tipoMap.get(tipoKey) || 0) + c.kilosCosechados);
+
+        for (const ct of c.CosechaTrabajador) {
+            if (ct.Trabajador) {
+                const tId = ct.Trabajador.id;
+                const kilosTrabajador = ct.kilosAsignados ?? c.kilosCosechados;
+                const prev = trabajadorMap.get(tId) || {
+                    trabajadorId: tId,
+                    nombre: `${ct.Trabajador.nombres}${ct.Trabajador.apellidos ? " " + ct.Trabajador.apellidos : ""}`,
+                    dni: ct.Trabajador.dni || "",
+                    kilos: 0,
+                    cosechas: 0,
+                };
+                prev.kilos += kilosTrabajador;
+                prev.cosechas += 1;
+                trabajadorMap.set(tId, prev);
+            }
+        }
+
+        for (const cl of c.cosechaLotes) {
+            if (cl.lote) {
+                const lId = cl.lote.id;
+                const prev = loteMap.get(lId) || {
+                    loteId: lId,
+                    codigo: cl.lote.codigo,
+                    nombre: cl.lote.nombre ?? null,
+                    kilos: 0,
+                    cosechas: 0,
+                };
+                prev.kilos += c.kilosCosechados;
+                prev.cosechas += 1;
+                loteMap.set(lId, prev);
+            }
+        }
+    }
+
+    const porDia = Array.from(diaMap.entries()).map(([fecha, kilos]) => ({ fecha, kilos }));
+    const porMes = Array.from(mesMap.entries()).map(([mes, kilos]) => ({ mes, kilos }));
+    const porQuincena = Array.from(quincenaMap.entries()).map(([quincena, kilos]) => ({ quincena, kilos }));
+    const porTipoCosecha = Array.from(tipoMap.entries()).map(([tipoCosecha, kilos]) => ({ tipoCosecha, kilos }));
+    const porTrabajador = Array.from(trabajadorMap.values());
+    const porLote = Array.from(loteMap.values());
+
+    return {
+        porDia,
+        porMes,
+        porQuincena,
+        porTipoCosecha,
+        porTrabajador,
+        porLote,
+    };
+}
