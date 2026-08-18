@@ -329,7 +329,24 @@ export async function obtenerReporteCosechas() {
         },
     });
 
-    const diaMap = new Map<string, number>();
+    const diaMap = new Map<
+        string,
+        {
+            fecha: string;
+            kilos: number;
+            cantidadRegistros: number;
+            detalles: {
+                id: number;
+                kilosCosechados: number;
+                totalHectareas: number;
+                tipoCosecha: string;
+                varietal: string | null;
+                lotes: { id: number; codigo: string; nombre: string | null; hectareas: number | null }[];
+                trabajadores: { id: number; nombre: string; dni: string; kilosAsignados: number | null }[];
+            }[];
+        }
+    >();
+
     const mesMap = new Map<string, number>();
     const quincenaMap = new Map<string, number>();
     const tipoMap = new Map<string, number>();
@@ -343,7 +360,36 @@ export async function obtenerReporteCosechas() {
         const dd = String(fechaObj.getDate()).padStart(2, "0");
 
         const diaKey = `${yyyy}-${mm}-${dd}`;
-        diaMap.set(diaKey, (diaMap.get(diaKey) || 0) + c.kilosCosechados);
+        let diaEntry = diaMap.get(diaKey);
+        if (!diaEntry) {
+            diaEntry = { fecha: diaKey, kilos: 0, cantidadRegistros: 0, detalles: [] };
+            diaMap.set(diaKey, diaEntry);
+        }
+        diaEntry.kilos += c.kilosCosechados;
+        diaEntry.cantidadRegistros += 1;
+        diaEntry.detalles.push({
+            id: c.id,
+            kilosCosechados: c.kilosCosechados,
+            totalHectareas: c.totalHectareas,
+            tipoCosecha: c.tipoCosecha,
+            varietal: c.varietal ?? null,
+            lotes: c.cosechaLotes
+                .filter((cl) => cl.lote)
+                .map((cl) => ({
+                    id: cl.lote.id,
+                    codigo: cl.lote.codigo,
+                    nombre: cl.lote.nombre ?? null,
+                    hectareas: cl.lote.hectareas ?? null,
+                })),
+            trabajadores: c.CosechaTrabajador
+                .filter((ct) => ct.Trabajador)
+                .map((ct) => ({
+                    id: ct.Trabajador.id,
+                    nombre: `${ct.Trabajador.nombres}${ct.Trabajador.apellidos ? " " + ct.Trabajador.apellidos : ""}`,
+                    dni: ct.Trabajador.dni || "",
+                    kilosAsignados: ct.kilosAsignados ?? null,
+                })),
+        });
 
         const mesKey = `${yyyy}-${mm}`;
         mesMap.set(mesKey, (mesMap.get(mesKey) || 0) + c.kilosCosechados);
@@ -390,7 +436,7 @@ export async function obtenerReporteCosechas() {
         }
     }
 
-    const porDia = Array.from(diaMap.entries()).map(([fecha, kilos]) => ({ fecha, kilos }));
+    const porDia = Array.from(diaMap.values());
     const porMes = Array.from(mesMap.entries()).map(([mes, kilos]) => ({ mes, kilos }));
     const porQuincena = Array.from(quincenaMap.entries()).map(([quincena, kilos]) => ({ quincena, kilos }));
     const porTipoCosecha = Array.from(tipoMap.entries()).map(([tipoCosecha, kilos]) => ({ tipoCosecha, kilos }));
@@ -405,4 +451,5 @@ export async function obtenerReporteCosechas() {
         porTrabajador,
         porLote,
     };
-}
+}
+
