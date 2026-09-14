@@ -67,21 +67,30 @@ model Usuario {
 }
 
 model ProcesoTrazabilidad {
-  id              Int          @id @default(autoincrement())
-  fecha           DateTime
-  etapa           String?
-  kilosIngresados Float
-  cosechaId       Int?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  loteId          Int?
-  codigo          String       @unique
-  duracionHoras   Float
-  fechaInicio     DateTime?
-  fechaFin        DateTime?
-  tipoProceso     TipoProceso?
-  cosecha         Cosecha?     @relation(fields: [cosechaId], references: [id])
-  Lote            Lote?        @relation(fields: [loteId], references: [id])
+  id                 Int          @id @default(autoincrement())
+  fecha              DateTime
+  etapa              String?
+  kilosIngresados    Float
+  cosechaId          Int?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  loteId             Int?
+  codigo             String       @unique
+  duracionHoras      Float
+  fechaInicio        DateTime?
+  fechaFin           DateTime?
+  tipoProceso        TipoProceso?
+  gradosBrix         Float?
+  nivelPh            Float?
+  tempMaxima         Float?
+  tempMinima         Float?
+  tanqueFermentacion String?
+  inicioFermentacion DateTime?
+  finFermentacion    DateTime?
+  fueDespulpado      Boolean?
+  fueLavado          Boolean?
+  cosecha            Cosecha?     @relation(fields: [cosechaId], references: [id])
+  Lote               Lote?        @relation(fields: [loteId], references: [id])
 }
 
 model Trabajador {
@@ -135,6 +144,9 @@ model Secado {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   perfilProceso    PerfilSecado?
+  secadora         String?
+  tempMinima       Float?
+  tempMaxima       Float?
   lote             Lote          @relation(fields: [loteId], references: [id])
 }
 
@@ -149,22 +161,37 @@ model Empaque {
   observaciones    String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+  humedad          Float?
+  actividadAgua    Float?
+  puntajeSca       Float?
+  perfilSensorial  String?
+  fueCatado        Boolean?
   lote             Lote      @relation(fields: [loteId], references: [id])
 }
 
 model OrdenTrilla {
-  id            String    @id @default(uuid())
-  codigoTrilla  String    @unique
-  fechaDespacho DateTime
-  fechaIngreso  DateTime?
-  calidad       String?
-  tipoSaco      String?
-  kilosEnviados Float
-  kilosNetos    Float?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  lotes         Lote[]
-  ventas        Venta[]
+  id              String    @id @default(uuid())
+  codigoTrilla    String    @unique
+  numeroGuia      String?
+  fechaDespacho   DateTime
+  fechaIngreso    DateTime?
+  calidad         String?
+  tipoSaco        String?
+  kilosEnviados   Float
+  kilosNetos      Float?
+  exportable      Float?
+  recuperado      Float?
+  malla13         Float?
+  segundaBuena    Float?
+  segundaMala     Float?
+  sucioEscojo     Float?
+  cisco           Float?
+  descarteMaquina Float?
+  cascarilla      Float?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lotes           Lote[]
+  ventas          Venta[]
 }
 
 model Venta {
