@@ -64,6 +64,15 @@ export async function createProceso(req: Request, res: Response) {
             etapa,
             kilosIngresados,
             kilosResultantes,
+            gradosBrix,
+            nivelPh,
+            tempMaxima,
+            tempMinima,
+            tanqueFermentacion,
+            inicioFermentacion,
+            finFermentacion,
+            fueDespulpado,
+            fueLavado,
         } = req.body;
 
         if (
@@ -93,6 +102,42 @@ export async function createProceso(req: Request, res: Response) {
             etapa: String(etapa),
             kilosIngresados: Number(kilosIngresados),
             kilosResultantes: Number(kilosResultantes),
+            gradosBrix:
+                gradosBrix !== undefined && gradosBrix !== null
+                    ? Number(gradosBrix)
+                    : null,
+            nivelPh:
+                nivelPh !== undefined && nivelPh !== null
+                    ? Number(nivelPh)
+                    : null,
+            tempMaxima:
+                tempMaxima !== undefined && tempMaxima !== null
+                    ? Number(tempMaxima)
+                    : null,
+            tempMinima:
+                tempMinima !== undefined && tempMinima !== null
+                    ? Number(tempMinima)
+                    : null,
+            tanqueFermentacion:
+                tanqueFermentacion !== undefined && tanqueFermentacion !== null
+                    ? String(tanqueFermentacion)
+                    : null,
+            inicioFermentacion:
+                inicioFermentacion !== undefined && inicioFermentacion !== null
+                    ? String(inicioFermentacion)
+                    : null,
+            finFermentacion:
+                finFermentacion !== undefined && finFermentacion !== null
+                    ? String(finFermentacion)
+                    : null,
+            fueDespulpado:
+                fueDespulpado !== undefined && fueDespulpado !== null
+                    ? Boolean(fueDespulpado)
+                    : null,
+            fueLavado:
+                fueLavado !== undefined && fueLavado !== null
+                    ? Boolean(fueLavado)
+                    : null,
         });
 
         res.status(201).json({
@@ -177,6 +222,69 @@ export async function updateProceso(req: Request, res: Response) {
 
             ...(req.body.kilosResultantes !== undefined && {
                 kilosResultantes: Number(req.body.kilosResultantes),
+            }),
+
+            ...(req.body.gradosBrix !== undefined && {
+                gradosBrix:
+                    req.body.gradosBrix !== null
+                        ? Number(req.body.gradosBrix)
+                        : null,
+            }),
+
+            ...(req.body.nivelPh !== undefined && {
+                nivelPh:
+                    req.body.nivelPh !== null
+                        ? Number(req.body.nivelPh)
+                        : null,
+            }),
+
+            ...(req.body.tempMaxima !== undefined && {
+                tempMaxima:
+                    req.body.tempMaxima !== null
+                        ? Number(req.body.tempMaxima)
+                        : null,
+            }),
+
+            ...(req.body.tempMinima !== undefined && {
+                tempMinima:
+                    req.body.tempMinima !== null
+                        ? Number(req.body.tempMinima)
+                        : null,
+            }),
+
+            ...(req.body.tanqueFermentacion !== undefined && {
+                tanqueFermentacion:
+                    req.body.tanqueFermentacion !== null
+                        ? String(req.body.tanqueFermentacion)
+                        : null,
+            }),
+
+            ...(req.body.inicioFermentacion !== undefined && {
+                inicioFermentacion:
+                    req.body.inicioFermentacion !== null
+                        ? String(req.body.inicioFermentacion)
+                        : null,
+            }),
+
+            ...(req.body.finFermentacion !== undefined && {
+                finFermentacion:
+                    req.body.finFermentacion !== null
+                        ? String(req.body.finFermentacion)
+                        : null,
+            }),
+
+            ...(req.body.fueDespulpado !== undefined && {
+                fueDespulpado:
+                    req.body.fueDespulpado !== null
+                        ? Boolean(req.body.fueDespulpado)
+                        : null,
+            }),
+
+            ...(req.body.fueLavado !== undefined && {
+                fueLavado:
+                    req.body.fueLavado !== null
+                        ? Boolean(req.body.fueLavado)
+                        : null,
             }),
         });
 
