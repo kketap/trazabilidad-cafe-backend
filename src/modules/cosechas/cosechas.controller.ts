@@ -7,6 +7,9 @@ import {
     obtenerResumenCosechas,
     obtenerReporteCosechas,
     actualizarCosecha,
+    procesarCargaMasivaCosechas,
+    previewCargaMasivaCosechas,
+    confirmarCargaMasivaCosechas,
 } from "./cosechas.service";
 
 function getRangoMesActual() {
@@ -107,4 +110,102 @@ export async function getCosechasReporte(_req: Request, res: Response) {
         res.status(500).json({ ok: false, message: "Error obteniendo reporte de cosechas" });
     }
 }
+
+export async function cargarCosechasMasivas(req: Request, res: Response): Promise<void> {
+    try {
+        if (!req.file) {
+            res.status(400).json({
+                ok: false,
+                message: "No se ha proporcionado ningún archivo. Debe adjuntar un archivo en el campo 'file'.",
+            });
+            return;
+        }
+
+        const buffer = req.file.buffer;
+        if (!buffer || buffer.length === 0) {
+            res.status(400).json({
+                ok: false,
+                message: "El archivo proporcionado está vacío.",
+            });
+            return;
+        }
+
+        const resultado = await procesarCargaMasivaCosechas(buffer);
+
+        res.status(201).json({
+            ok: true,
+            message: "Carga masiva de cosechas procesada exitosamente",
+            data: resultado,
+        });
+    } catch (error: any) {
+        console.error("Error en carga masiva de cosechas:", error);
+        res.status(400).json({
+            ok: false,
+            message: error.message || "Error procesando la carga masiva de cosechas",
+        });
+    }
+}
+
+export async function previewCosechasMasivas(req: Request, res: Response): Promise<void> {
+    try {
+        if (!req.file) {
+            res.status(400).json({
+                ok: false,
+                message: "No se ha proporcionado ningún archivo. Debe adjuntar un archivo en el campo 'file'.",
+            });
+            return;
+        }
+
+        const buffer = req.file.buffer;
+        if (!buffer || buffer.length === 0) {
+            res.status(400).json({
+                ok: false,
+                message: "El archivo proporcionado está vacío.",
+            });
+            return;
+        }
+
+        const resultado = await previewCargaMasivaCosechas(buffer);
+
+        res.json({
+            ok: true,
+            data: resultado,
+        });
+    } catch (error: any) {
+        console.error("Error en previsualización de cosechas:", error);
+        res.status(400).json({
+            ok: false,
+            message: error.message || "Error al previsualizar el archivo de cosechas",
+        });
+    }
+}
+
+export async function confirmarCosechasMasivas(req: Request, res: Response): Promise<void> {
+    try {
+        const { filas } = req.body;
+        if (!filas || !Array.isArray(filas) || filas.length === 0) {
+            res.status(400).json({
+                ok: false,
+                message: "No se proporcionaron filas válidas para confirmar la carga.",
+            });
+            return;
+        }
+
+        const resultado = await confirmarCargaMasivaCosechas(filas);
+
+        res.status(201).json({
+            ok: true,
+            message: "Cosechas cargadas y confirmadas exitosamente",
+            data: resultado,
+        });
+    } catch (error: any) {
+        console.error("Error confirmando carga masiva de cosechas:", error);
+        res.status(400).json({
+            ok: false,
+            message: error.message || "Error al confirmar la carga de cosechas",
+        });
+    }
+}
+
+
 

@@ -77,4 +77,75 @@ describe("Pruebas de Integración - Módulo Cosechas", () => {
       expect(res.body.data).toHaveProperty("trabajadorId", 1);
     });
   });
+
+  describe("POST /api/cosechas/masiva", () => {
+    it("debe rechazar la petición con status 401 si no se envía token", async () => {
+      const res = await request(app)
+        .post("/api/cosechas/masiva")
+        .attach("file", Buffer.from("dummy content"), "cosechas.xlsx");
+
+      expect(res.status).toBe(401);
+      expect(res.body).toHaveProperty("message");
+    });
+
+    it("debe rechazar con status 400 si no se envía ningún archivo", async () => {
+      const res = await request(app)
+        .post("/api/cosechas/masiva")
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.ok).toBe(false);
+      expect(res.body.message).toMatch(/archivo/i);
+    });
+
+    it("debe procesar exitosamente el archivo Excel con token válido", async () => {
+      const mockResultado = {
+        totalFilasProcesadas: 2,
+        totalGruposCreados: 1,
+        cosechas: [
+          {
+            id: 10,
+            fecha: "2026-08-01T00:00:00.000Z",
+            kilosCosechados: 1200,
+            lotes: "LOTE-01, LOTE-02",
+            totalHectareas: 3.5,
+            tipoCosecha: "plena",
+            varietal: "Geisha",
+          },
+        ],
+      };
+
+      (cosechasService.procesarCargaMasivaCosechas as jest.Mock).mockResolvedValue(mockResultado);
+
+      const fakeExcelBuffer = Buffer.from("simulated-excel-content");
+
+      const res = await request(app)
+        .post("/api/cosechas/masiva")
+        .set("Authorization", `Bearer ${validToken}`)
+        .attach("file", fakeExcelBuffer, "cosechas.xlsx");
+
+      expect(res.status).toBe(201);
+      expect(res.body.ok).toBe(true);
+      expect(res.body.data).toEqual(mockResultado);
+      expect(cosechasService.procesarCargaMasivaCosechas).toHaveBeenCalled();
+    });
+
+    it("debe responder con 400 si el servicio lanza un error de validación", async () => {
+      (cosechasService.procesarCargaMasivaCosechas as jest.Mock).mockRejectedValue(
+        new Error("Validación fallida: Los siguientes DNI de trabajadores no existen: [99999999]")
+      );
+
+      const fakeExcelBuffer = Buffer.from("simulated-excel-content");
+
+      const res = await request(app)
+        .post("/api/cosechas/masiva")
+        .set("Authorization", `Bearer ${validToken}`)
+        .attach("file", fakeExcelBuffer, "cosechas.xlsx");
+
+      expect(res.status).toBe(400);
+      expect(res.body.ok).toBe(false);
+      expect(res.body.message).toContain("99999999");
+    });
+  });
 });
+
