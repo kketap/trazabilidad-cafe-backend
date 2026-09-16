@@ -10,8 +10,11 @@ import {
 
 const router = Router();
 
-router.get("/", getProcesos);
+// Resumen debe ir antes de "/:id" si en el futuro agregas una ruta por ID.
 router.get("/resumen", getTrazabilidadResumen);
+
+// CRUD principal.
+router.get("/", getProcesos);
 router.post("/", createProceso);
 router.put("/:id", updateProceso);
 router.delete("/:id", deleteProceso);

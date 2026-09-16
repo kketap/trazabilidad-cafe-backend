@@ -33,5 +33,4 @@ router.post("/masiva", upload.single("file"), cargarCosechasMasivas);
 router.put("/:id", updateCosecha);
 router.delete("/:id", deleteCosecha);
 
-
-export default router;
+export default router;

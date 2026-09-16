@@ -1,29 +1,80 @@
+// src/modules/cosechas/cosechas.service.ts
 import { prisma } from "../../config/prisma";
 import * as XLSX from "xlsx";
+
+export type CosechaTrabajadorInput = {
+    trabajadorId: number;
+    kilosAsignados?: number | null;
+};
 
 export type CosechaInput = {
     fecha: string;
     kilosCosechados: number;
     cantidadCosechadores?: number;
+
     lotes?: string;
     loteIds?: number[];
+
     totalHectareas: number;
+
     tipoCosecha?: string;
-    trabajadorId: number;
+
+    // Compatibilidad con versión antigua de un solo trabajador
+    trabajadorId?: number;
+
+    // Nueva versión: varios trabajadores
+    trabajadores?: CosechaTrabajadorInput[];
+
+    // Compatibilidad con payloads antiguos
     tipo_cosecha?: string;
     kilos_diarios?: number;
     kilos_quincena?: number;
     kilos_mensuales?: number;
-    varietal?: string;
+
+    varietal?: string | string[] | null;
+};
+
+type ResumenFiltros = {
+    desde?: Date;
+    hasta?: Date;
 };
 
 export function normalizeTipoCosecha(val?: string): string {
     if (!val) return "plena";
+
     const lower = val.toLowerCase().trim();
+
     if (lower === "manual") return "plena";
     if (lower === "rebusque") return "rebusca";
     if (lower === "selectiva") return "selectiva";
+    if (lower === "rebusca") return "rebusca";
+    if (lower === "plena") return "plena";
+
     return lower;
+}
+
+function normalizeVarietal(value?: string | string[] | null): string | null {
+    if (Array.isArray(value)) {
+        return value.filter(Boolean).join(", ");
+    }
+
+    return value ?? null;
+}
+
+function buildTrabajadoresInput(data: CosechaInput): CosechaTrabajadorInput[] {
+    if (Array.isArray(data.trabajadores) && data.trabajadores.length > 0) {
+        return data.trabajadores;
+    }
+
+    if (data.trabajadorId !== undefined && data.trabajadorId !== null) {
+        return [
+            {
+                trabajadorId: Number(data.trabajadorId),
+            },
+        ];
+    }
+
+    return [];
 }
 
 export async function listarCosechas() {
@@ -39,6 +90,7 @@ export async function listarCosechas() {
                     lote: true,
                 },
             },
+            procesos: true,
         },
         orderBy: {
             fecha: "desc",
@@ -60,12 +112,14 @@ export async function obtenerCosechaPorId(id: number) {
                     lote: true,
                 },
             },
+            procesos: true,
         },
     });
 }
 
 export async function crearCosecha(data: CosechaInput) {
     const loteIds = data.loteIds ?? [];
+    const trabajadores = buildTrabajadoresInput(data);
 
     const lotesTexto =
         data.lotes ||
@@ -83,27 +137,40 @@ export async function crearCosecha(data: CosechaInput) {
             lotes: lotesTexto,
             totalHectareas: Number(data.totalHectareas),
             tipoCosecha: tipoCosechaFinal,
-            tipo_cosecha: tipoCosechaFinal,
-            kilos_diarios: data.kilos_diarios !== undefined ? Number(data.kilos_diarios) : null,
-            kilos_quincena: data.kilos_quincena !== undefined ? Number(data.kilos_quincena) : null,
-            kilos_mensuales: data.kilos_mensuales !== undefined ? Number(data.kilos_mensuales) : null,
-            varietal: data.varietal,
+            varietal: normalizeVarietal(data.varietal),
 
-            // Relación a través de la tabla intermedia
-            CosechaTrabajador: {
-                create: {
-                    trabajadorId: Number(data.trabajadorId),
-                },
-            },
-            cosechaLotes: {
-                create: loteIds.map((loteId) => ({
-                    lote: {
-                        connect: {
-                            id: Number(loteId),
-                        },
-                    },
-                })),
-            },
+            cosechaLotes:
+                loteIds.length > 0
+                    ? {
+                        create: loteIds.map((loteId) => ({
+                            lote: {
+                                connect: {
+                                    id: Number(loteId),
+                                },
+                            },
+                        })),
+                    }
+                    : undefined,
+
+            CosechaTrabajador:
+                trabajadores.length > 0
+                    ? {
+                        create: trabajadores.map(
+                            (item: CosechaTrabajadorInput) => ({
+                                Trabajador: {
+                                    connect: {
+                                        id: Number(item.trabajadorId),
+                                    },
+                                },
+                                kilosAsignados:
+                                    item.kilosAsignados !== undefined &&
+                                        item.kilosAsignados !== null
+                                        ? Number(item.kilosAsignados)
+                                        : null,
+                            }),
+                        ),
+                    }
+                    : undefined,
         },
         include: {
             CosechaTrabajador: {
@@ -116,60 +183,47 @@ export async function crearCosecha(data: CosechaInput) {
                     lote: true,
                 },
             },
+            procesos: true,
         },
     });
 }
 
-export async function actualizarCosecha(id: number, data: Partial<CosechaInput>) {
+export async function actualizarCosecha(
+    id: number,
+    data: Partial<CosechaInput>,
+) {
     const loteIds = data.loteIds;
+    const trabajadores = data.trabajadores;
+
     const rawTipo = data.tipo_cosecha || data.tipoCosecha;
-    const tipoCosechaFinal = rawTipo !== undefined ? normalizeTipoCosecha(rawTipo) : undefined;
+    const tipoCosechaFinal =
+        rawTipo !== undefined ? normalizeTipoCosecha(rawTipo) : undefined;
 
     return prisma.$transaction(async (tx) => {
-        // Actualización de la entidad principal omitiendo trabajadorId
         await tx.cosecha.update({
             where: { id },
             data: {
-                ...(data.fecha && { fecha: new Date(data.fecha) }),
+                ...(data.fecha && {
+                    fecha: new Date(data.fecha),
+                }),
                 ...(data.kilosCosechados !== undefined && {
                     kilosCosechados: Number(data.kilosCosechados),
                 }),
-                ...(data.lotes !== undefined && { lotes: data.lotes }),
+                ...(data.lotes !== undefined && {
+                    lotes: data.lotes,
+                }),
                 ...(data.totalHectareas !== undefined && {
                     totalHectareas: Number(data.totalHectareas),
                 }),
                 ...(tipoCosechaFinal !== undefined && {
                     tipoCosecha: tipoCosechaFinal,
-                    tipo_cosecha: tipoCosechaFinal,
                 }),
-                ...(data.kilos_diarios !== undefined && {
-                    kilos_diarios: data.kilos_diarios ? Number(data.kilos_diarios) : null,
+                ...(data.varietal !== undefined && {
+                    varietal: normalizeVarietal(data.varietal),
                 }),
-                ...(data.kilos_quincena !== undefined && {
-                    kilos_quincena: data.kilos_quincena ? Number(data.kilos_quincena) : null,
-                }),
-                ...(data.kilos_mensuales !== undefined && {
-                    kilos_mensuales: data.kilos_mensuales ? Number(data.kilos_mensuales) : null,
-                }),
-                ...(data.varietal !== undefined && { varietal: data.varietal }),
             },
         });
 
-        // Reconstrucción de la relación con Trabajador si viene en el payload
-        if (data.trabajadorId !== undefined) {
-            await tx.cosechaTrabajador.deleteMany({
-                where: { cosechaId: id },
-            });
-
-            await tx.cosechaTrabajador.create({
-                data: {
-                    cosechaId: id,
-                    trabajadorId: Number(data.trabajadorId),
-                },
-            });
-        }
-
-        // Reconstrucción de la relación con Lotes
         if (loteIds !== undefined) {
             await tx.cosechaLote.deleteMany({
                 where: {
@@ -188,6 +242,50 @@ export async function actualizarCosecha(id: number, data: Partial<CosechaInput>)
             }
         }
 
+        if (trabajadores !== undefined) {
+            await tx.cosechaTrabajador.deleteMany({
+                where: {
+                    cosechaId: id,
+                },
+            });
+
+            if (trabajadores.length > 0) {
+                await tx.cosechaTrabajador.createMany({
+                    data: trabajadores.map(
+                        (item: CosechaTrabajadorInput) => ({
+                            cosechaId: id,
+                            trabajadorId: Number(item.trabajadorId),
+                            kilosAsignados:
+                                item.kilosAsignados !== undefined &&
+                                    item.kilosAsignados !== null
+                                    ? Number(item.kilosAsignados)
+                                    : null,
+                        }),
+                    ),
+                    skipDuplicates: true,
+                });
+            }
+        }
+
+        if (
+            trabajadores === undefined &&
+            data.trabajadorId !== undefined &&
+            data.trabajadorId !== null
+        ) {
+            await tx.cosechaTrabajador.deleteMany({
+                where: {
+                    cosechaId: id,
+                },
+            });
+
+            await tx.cosechaTrabajador.create({
+                data: {
+                    cosechaId: id,
+                    trabajadorId: Number(data.trabajadorId),
+                },
+            });
+        }
+
         return tx.cosecha.findUnique({
             where: { id },
             include: {
@@ -201,6 +299,7 @@ export async function actualizarCosecha(id: number, data: Partial<CosechaInput>)
                         lote: true,
                     },
                 },
+                procesos: true,
             },
         });
     });
@@ -211,11 +310,6 @@ export async function eliminarCosecha(id: number) {
         where: { id },
     });
 }
-
-type ResumenFiltros = {
-    desde?: Date;
-    hasta?: Date;
-};
 
 export async function obtenerResumenCosechas(filtros: ResumenFiltros = {}) {
     const cosechas = await prisma.cosecha.findMany({
@@ -244,62 +338,113 @@ export async function obtenerResumenCosechas(filtros: ResumenFiltros = {}) {
     });
 
     const kilosTotales = cosechas.reduce(
-        (total, cosecha) => total + cosecha.kilosCosechados,
+        (total, cosecha) => total + Number(cosecha.kilosCosechados ?? 0),
         0,
     );
 
     const totalHectareas = cosechas.reduce(
-        (total, cosecha) => total + cosecha.totalHectareas,
+        (total, cosecha) => total + Number(cosecha.totalHectareas ?? 0),
         0,
     );
 
     const rendimiento =
         totalHectareas > 0 ? kilosTotales / totalHectareas : 0;
 
-    // Mejor trabajador
-    const trabajadorKilos = new Map<number, { id: number; nombre: string; kilos: number }>();
-    for (const c of cosechas) {
-        for (const ct of c.CosechaTrabajador) {
-            if (ct.Trabajador) {
-                const tId = ct.Trabajador.id;
-                const cur = trabajadorKilos.get(tId) || {
-                    id: tId,
-                    nombre: `${ct.Trabajador.nombres}${ct.Trabajador.apellidos ? " " + ct.Trabajador.apellidos : ""}`,
-                    kilos: 0,
-                };
-                cur.kilos += c.kilosCosechados;
-                trabajadorKilos.set(tId, cur);
-            }
+    const trabajadorKilos = new Map<
+        number,
+        {
+            id: number;
+            nombre: string;
+            kilos: number;
         }
-    }
-    let mejorTrabajador: { id: number; nombre: string; kilos: number } | null = null;
-    for (const t of trabajadorKilos.values()) {
-        if (!mejorTrabajador || t.kilos > mejorTrabajador.kilos) {
-            mejorTrabajador = t;
+    >();
+
+    for (const cosecha of cosechas) {
+        const trabajadoresCosecha = cosecha.CosechaTrabajador ?? [];
+
+        for (const item of trabajadoresCosecha) {
+            if (!item.Trabajador) continue;
+
+            const kilosTrabajador =
+                item.kilosAsignados ??
+                Number(cosecha.kilosCosechados ?? 0) /
+                Math.max(trabajadoresCosecha.length, 1);
+
+            const trabajadorId = item.Trabajador.id;
+
+            const actual = trabajadorKilos.get(trabajadorId) ?? {
+                id: trabajadorId,
+                nombre: `${item.Trabajador.nombres}${item.Trabajador.apellidos
+                        ? ` ${item.Trabajador.apellidos}`
+                        : ""
+                    }`,
+                kilos: 0,
+            };
+
+            actual.kilos += kilosTrabajador;
+            trabajadorKilos.set(trabajadorId, actual);
         }
     }
 
-    // Mejor lote
-    const loteKilos = new Map<number, { id: number; codigo: string; nombre?: string | null; kilos: number }>();
-    for (const c of cosechas) {
-        for (const cl of c.cosechaLotes) {
-            if (cl.lote) {
-                const lId = cl.lote.id;
-                const cur = loteKilos.get(lId) || {
-                    id: lId,
-                    codigo: cl.lote.codigo,
-                    nombre: cl.lote.nombre,
-                    kilos: 0,
-                };
-                cur.kilos += c.kilosCosechados;
-                loteKilos.set(lId, cur);
-            }
+    let mejorTrabajador: {
+        id: number;
+        nombre: string;
+        kilos: number;
+    } | null = null;
+
+    for (const trabajador of trabajadorKilos.values()) {
+        if (
+            !mejorTrabajador ||
+            trabajador.kilos > mejorTrabajador.kilos
+        ) {
+            mejorTrabajador = trabajador;
         }
     }
-    let mejorLote: { id: number; codigo: string; nombre?: string | null; kilos: number } | null = null;
-    for (const l of loteKilos.values()) {
-        if (!mejorLote || l.kilos > mejorLote.kilos) {
-            mejorLote = l;
+
+    const loteKilos = new Map<
+        number,
+        {
+            id: number;
+            codigo: string;
+            nombre?: string | null;
+            kilos: number;
+        }
+    >();
+
+    for (const cosecha of cosechas) {
+        const lotesCosecha = cosecha.cosechaLotes ?? [];
+
+        for (const item of lotesCosecha) {
+            if (!item.lote) continue;
+
+            const kilosLote =
+                Number(cosecha.kilosCosechados ?? 0) /
+                Math.max(lotesCosecha.length, 1);
+
+            const loteId = item.lote.id;
+
+            const actual = loteKilos.get(loteId) ?? {
+                id: loteId,
+                codigo: item.lote.codigo,
+                nombre: item.lote.nombre,
+                kilos: 0,
+            };
+
+            actual.kilos += kilosLote;
+            loteKilos.set(loteId, actual);
+        }
+    }
+
+    let mejorLote: {
+        id: number;
+        codigo: string;
+        nombre?: string | null;
+        kilos: number;
+    } | null = null;
+
+    for (const lote of loteKilos.values()) {
+        if (!mejorLote || lote.kilos > mejorLote.kilos) {
+            mejorLote = lote;
         }
     }
 
@@ -315,7 +460,6 @@ export async function obtenerResumenCosechas(filtros: ResumenFiltros = {}) {
 
 export async function obtenerReporteCosechas() {
     const cosechas = await prisma.cosecha.findMany({
-        orderBy: { fecha: "asc" },
         include: {
             CosechaTrabajador: {
                 include: {
@@ -328,129 +472,145 @@ export async function obtenerReporteCosechas() {
                 },
             },
         },
+        orderBy: {
+            fecha: "asc",
+        },
     });
 
-    const diaMap = new Map<
-        string,
+    const porDiaMap = new Map<string, number>();
+    const porMesMap = new Map<string, number>();
+    const porQuincenaMap = new Map<string, number>();
+    const porTipoCosechaMap = new Map<string, number>();
+
+    const porTrabajadorMap = new Map<
+        number,
         {
-            fecha: string;
+            trabajadorId: number;
+            nombre: string;
+            dni: string;
             kilos: number;
-            cantidadRegistros: number;
-            detalles: {
-                id: number;
-                kilosCosechados: number;
-                totalHectareas: number;
-                tipoCosecha: string;
-                varietal: string | null;
-                lotes: { id: number; codigo: string; nombre: string | null; hectareas: number | null }[];
-                trabajadores: { id: number; nombre: string; dni: string; kilosAsignados: number | null }[];
-            }[];
+            cosechas: number;
         }
     >();
 
-    const mesMap = new Map<string, number>();
-    const quincenaMap = new Map<string, number>();
-    const tipoMap = new Map<string, number>();
-    const trabajadorMap = new Map<number, { trabajadorId: number; nombre: string; dni: string; kilos: number; cosechas: number }>();
-    const loteMap = new Map<number, { loteId: number; codigo: string; nombre: string | null; kilos: number; cosechas: number }>();
-
-    for (const c of cosechas) {
-        const fechaObj = new Date(c.fecha);
-        const yyyy = fechaObj.getFullYear();
-        const mm = String(fechaObj.getMonth() + 1).padStart(2, "0");
-        const dd = String(fechaObj.getDate()).padStart(2, "0");
-
-        const diaKey = `${yyyy}-${mm}-${dd}`;
-        let diaEntry = diaMap.get(diaKey);
-        if (!diaEntry) {
-            diaEntry = { fecha: diaKey, kilos: 0, cantidadRegistros: 0, detalles: [] };
-            diaMap.set(diaKey, diaEntry);
+    const porLoteMap = new Map<
+        number,
+        {
+            loteId: number;
+            codigo: string;
+            nombre: string | null;
+            kilos: number;
+            cosechas: number;
         }
-        diaEntry.kilos += c.kilosCosechados;
-        diaEntry.cantidadRegistros += 1;
-        diaEntry.detalles.push({
-            id: c.id,
-            kilosCosechados: c.kilosCosechados,
-            totalHectareas: c.totalHectareas,
-            tipoCosecha: c.tipoCosecha,
-            varietal: c.varietal ?? null,
-            lotes: c.cosechaLotes
-                .filter((cl) => cl.lote)
-                .map((cl) => ({
-                    id: cl.lote.id,
-                    codigo: cl.lote.codigo,
-                    nombre: cl.lote.nombre ?? null,
-                    hectareas: cl.lote.hectareas ?? null,
-                })),
-            trabajadores: c.CosechaTrabajador
-                .filter((ct) => ct.Trabajador)
-                .map((ct) => ({
-                    id: ct.Trabajador.id,
-                    nombre: `${ct.Trabajador.nombres}${ct.Trabajador.apellidos ? " " + ct.Trabajador.apellidos : ""}`,
-                    dni: ct.Trabajador.dni || "",
-                    kilosAsignados: ct.kilosAsignados ?? null,
-                })),
-        });
+    >();
 
-        const mesKey = `${yyyy}-${mm}`;
-        mesMap.set(mesKey, (mesMap.get(mesKey) || 0) + c.kilosCosechados);
+    for (const cosecha of cosechas) {
+        const kilos = Number(cosecha.kilosCosechados ?? 0);
+        const fecha = new Date(cosecha.fecha);
 
-        const dayNum = fechaObj.getDate();
-        const qNum = dayNum <= 15 ? 1 : 2;
-        const quincenaKey = `${yyyy}-${mm}-Q${qNum}`;
-        quincenaMap.set(quincenaKey, (quincenaMap.get(quincenaKey) || 0) + c.kilosCosechados);
+        const year = fecha.getFullYear();
+        const month = String(fecha.getMonth() + 1).padStart(2, "0");
+        const day = String(fecha.getDate()).padStart(2, "0");
 
-        const tipoKey = c.tipoCosecha || "No especificado";
-        tipoMap.set(tipoKey, (tipoMap.get(tipoKey) || 0) + c.kilosCosechados);
+        const fechaKey = `${year}-${month}-${day}`;
+        const mesKey = `${year}-${month}`;
+        const quincenaKey = `${year}-${month}-${fecha.getDate() <= 15 ? "Q1" : "Q2"
+            }`;
+        const tipoCosechaKey = cosecha.tipoCosecha || "plena";
 
-        for (const ct of c.CosechaTrabajador) {
-            if (ct.Trabajador) {
-                const tId = ct.Trabajador.id;
-                const kilosTrabajador = ct.kilosAsignados ?? c.kilosCosechados;
-                const prev = trabajadorMap.get(tId) || {
-                    trabajadorId: tId,
-                    nombre: `${ct.Trabajador.nombres}${ct.Trabajador.apellidos ? " " + ct.Trabajador.apellidos : ""}`,
-                    dni: ct.Trabajador.dni || "",
-                    kilos: 0,
-                    cosechas: 0,
-                };
-                prev.kilos += kilosTrabajador;
-                prev.cosechas += 1;
-                trabajadorMap.set(tId, prev);
-            }
+        porDiaMap.set(fechaKey, (porDiaMap.get(fechaKey) ?? 0) + kilos);
+        porMesMap.set(mesKey, (porMesMap.get(mesKey) ?? 0) + kilos);
+
+        porQuincenaMap.set(
+            quincenaKey,
+            (porQuincenaMap.get(quincenaKey) ?? 0) + kilos,
+        );
+
+        porTipoCosechaMap.set(
+            tipoCosechaKey,
+            (porTipoCosechaMap.get(tipoCosechaKey) ?? 0) + kilos,
+        );
+
+        const trabajadoresCosecha = cosecha.CosechaTrabajador ?? [];
+
+        for (const item of trabajadoresCosecha) {
+            if (!item.Trabajador) continue;
+
+            const kilosTrabajador =
+                item.kilosAsignados ??
+                kilos / Math.max(trabajadoresCosecha.length, 1);
+
+            const actual = porTrabajadorMap.get(item.trabajadorId) ?? {
+                trabajadorId: item.trabajadorId,
+                nombre: `${item.Trabajador.nombres}${item.Trabajador.apellidos
+                        ? ` ${item.Trabajador.apellidos}`
+                        : ""
+                    }`,
+                dni: item.Trabajador.dni,
+                kilos: 0,
+                cosechas: 0,
+            };
+
+            actual.kilos += kilosTrabajador;
+            actual.cosechas += 1;
+
+            porTrabajadorMap.set(item.trabajadorId, actual);
         }
 
-        for (const cl of c.cosechaLotes) {
-            if (cl.lote) {
-                const lId = cl.lote.id;
-                const prev = loteMap.get(lId) || {
-                    loteId: lId,
-                    codigo: cl.lote.codigo,
-                    nombre: cl.lote.nombre ?? null,
-                    kilos: 0,
-                    cosechas: 0,
-                };
-                prev.kilos += c.kilosCosechados;
-                prev.cosechas += 1;
-                loteMap.set(lId, prev);
-            }
+        const lotesCosecha = cosecha.cosechaLotes ?? [];
+
+        for (const item of lotesCosecha) {
+            if (!item.lote) continue;
+
+            const kilosLote = kilos / Math.max(lotesCosecha.length, 1);
+
+            const actual = porLoteMap.get(item.loteId) ?? {
+                loteId: item.loteId,
+                codigo: item.lote.codigo,
+                nombre: item.lote.nombre ?? null,
+                kilos: 0,
+                cosechas: 0,
+            };
+
+            actual.kilos += kilosLote;
+            actual.cosechas += 1;
+
+            porLoteMap.set(item.loteId, actual);
         }
     }
 
-    const porDia = Array.from(diaMap.values());
-    const porMes = Array.from(mesMap.entries()).map(([mes, kilos]) => ({ mes, kilos }));
-    const porQuincena = Array.from(quincenaMap.entries()).map(([quincena, kilos]) => ({ quincena, kilos }));
-    const porTipoCosecha = Array.from(tipoMap.entries()).map(([tipoCosecha, kilos]) => ({ tipoCosecha, kilos }));
-    const porTrabajador = Array.from(trabajadorMap.values());
-    const porLote = Array.from(loteMap.values());
-
     return {
-        porDia,
-        porMes,
-        porQuincena,
-        porTipoCosecha,
-        porTrabajador,
-        porLote,
+        porDia: Array.from(porDiaMap.entries()).map(([fecha, kilos]) => ({
+            fecha,
+            kilos,
+        })),
+
+        porMes: Array.from(porMesMap.entries()).map(([mes, kilos]) => ({
+            mes,
+            kilos,
+        })),
+
+        porQuincena: Array.from(porQuincenaMap.entries()).map(
+            ([quincena, kilos]) => ({
+                quincena,
+                kilos,
+            }),
+        ),
+
+        porTipoCosecha: Array.from(porTipoCosechaMap.entries()).map(
+            ([tipoCosecha, kilos]) => ({
+                tipoCosecha,
+                kilos,
+            }),
+        ),
+
+        porTrabajador: Array.from(porTrabajadorMap.values()).sort(
+            (a, b) => b.kilos - a.kilos,
+        ),
+
+        porLote: Array.from(porLoteMap.values()).sort(
+            (a, b) => b.kilos - a.kilos,
+        ),
     };
 }
 
@@ -1127,4 +1287,4 @@ export async function procesarCargaMasivaCosechas(buffer: Buffer) {
 }
 
 
-
+
