@@ -191,7 +191,7 @@ export async function actualizarSecado(id: number, data: Partial<SecadoInput>) {
         const secadoActualizado = await tx.secado.update({
             where: { id },
             data: {
-                loteId,
+                ...(loteId ? { lote: { connect: { id: loteId } } } : {}),
                 fechaInicio: data.fechaInicio ? new Date(data.fechaInicio) : undefined,
                 fechaFin:
                     data.fechaFin !== undefined

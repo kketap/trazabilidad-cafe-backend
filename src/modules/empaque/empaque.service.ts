@@ -89,7 +89,7 @@ export async function actualizarEmpaque(id: number, data: Partial<EmpaqueInput>)
         const empaqueActualizado = await tx.empaque.update({
             where: { id },
             data: {
-                loteId,
+                ...(loteId ? { lote: { connect: { id: loteId } } } : {}),
                 fechaInicio: data.fechaInicio ? new Date(data.fechaInicio) : undefined,
                 fechaFin: data.fechaFin !== undefined ? (data.fechaFin ? new Date(data.fechaFin) : null) : undefined,
                 kilosIngresados,
