@@ -13,6 +13,7 @@ export type LoteInput = {
     hectareas?: number | null;
     ubicacion?: string | null;
     observacion?: string | null;
+    gradosBrix?: number | null;
     activo?: boolean;
 };
 
@@ -158,15 +159,16 @@ export async function crearLote(data: LoteInput) {
                 data.saldoTemporal !== undefined && data.saldoTemporal !== null
                     ? Number(data.saldoTemporal)
                     : null,
-
-            // Campos mantenidos por compatibilidad, aunque ya no sean principales.
             hectareas:
                 data.hectareas !== undefined && data.hectareas !== null
                     ? Number(data.hectareas)
                     : null,
             ubicacion: data.ubicacion?.trim() || null,
-
             observacion: data.observacion?.trim() || null,
+            gradosBrix:
+                data.gradosBrix !== undefined && data.gradosBrix !== null
+                    ? Number(data.gradosBrix)
+                    : null,
             activo: data.activo ?? true,
         },
     });
@@ -218,6 +220,10 @@ export async function actualizarLote(id: number, data: Partial<LoteInput>) {
             }),
             ...(data.observacion !== undefined && {
                 observacion: data.observacion?.trim() || null,
+            }),
+            ...(data.gradosBrix !== undefined && {
+                gradosBrix:
+                    data.gradosBrix !== null ? Number(data.gradosBrix) : null,
             }),
             ...(data.activo !== undefined && {
                 activo: data.activo,

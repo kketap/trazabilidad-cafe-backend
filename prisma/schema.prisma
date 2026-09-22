@@ -33,10 +33,11 @@ model Lote {
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
   estado              EstadoLote            @default(EN_PROCESO)
-  kilosActuales       Float?
   kilosIniciales      Float?
+  kilosActuales       Float?
   saldoTemporal       Float?
   tipoCodigo          TipoCodigoLote        @default(COMERCIAL)
+  gradosBrix          Float?
   ordenTrillaId       String?
   cosechaLotes        CosechaLote[]
   empaques            Empaque[]
