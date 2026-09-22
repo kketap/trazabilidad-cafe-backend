@@ -135,6 +135,7 @@ model CosechaTrabajador {
 
 model Secado {
   id               Int           @id @default(autoincrement())
+  codigo           String?       @unique
   loteId           Int
   fechaInicio      DateTime
   fechaFin         DateTime?

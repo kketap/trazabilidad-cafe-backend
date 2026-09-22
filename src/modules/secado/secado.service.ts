@@ -2,6 +2,7 @@
 import { prisma } from "../../config/prisma";
 
 export type SecadoInput = {
+    codigo?: string;
     loteId: number;
     fechaInicio: string | Date;
     fechaFin?: string | Date | null;
@@ -13,6 +14,29 @@ export type SecadoInput = {
     tempMinima?: number | null;
     tempMaxima?: number | null;
 };
+
+/**
+ * Genera el siguiente código de secado: SEC-001, SEC-002, etc.
+ */
+async function generarCodigoSecado(): Promise<string> {
+    const secadosExistentes = await prisma.secado.findMany({
+        where: {
+            codigo: { startsWith: "SEC-" },
+        },
+        select: { codigo: true },
+    });
+
+    const numerosUsados = secadosExistentes
+        .map((s) => {
+            const partes = s.codigo.split("-");
+            const num = Number(partes[1]);
+            return Number.isNaN(num) ? 0 : num;
+        })
+        .filter((n) => n > 0);
+
+    const siguiente = numerosUsados.length > 0 ? Math.max(...numerosUsados) + 1 : 1;
+    return `SEC-${String(siguiente).padStart(3, "0")}`;
+}
 
 export async function listarSecados() {
     return prisma.secado.findMany({
@@ -96,8 +120,11 @@ export async function crearSecado(data: SecadoInput) {
             );
         }
 
+        const codigo = data.codigo?.trim() || (await generarCodigoSecado());
+
         const secado = await tx.secado.create({
             data: {
+                codigo,
                 loteId: Number(data.loteId),
                 fechaInicio: new Date(data.fechaInicio),
                 fechaFin: data.fechaFin ? new Date(data.fechaFin) : null,
