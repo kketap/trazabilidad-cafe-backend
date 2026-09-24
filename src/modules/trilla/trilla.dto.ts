@@ -3,6 +3,7 @@
 export type CrearOrdenTrillaDTO = {
   loteIds: number[];
   kilosEnviados: number;
+  sacosEnviados?: number | null;
   fechaDespacho?: string | Date;
   codigoTrilla?: string;
   numeroGuia?: string | null;
@@ -24,6 +25,7 @@ export type ActualizarOrdenTrillaDTO = {
   fechaIngreso?: string | Date | null;
   calidad?: string | null;
   tipoSaco?: string | null;
+  sacosEnviados?: number | null;
   kilosEnviados?: number;
   kilosNetos?: number | null;
   loteIds?: number[];

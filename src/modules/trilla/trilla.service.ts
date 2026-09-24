@@ -100,6 +100,7 @@ export async function crearOrdenTrilla(data: CrearOrdenTrillaDTO) {
         codigoTrilla,
         numeroGuia,
         kilosEnviados,
+        sacosEnviados: data.sacosEnviados != null ? Number(data.sacosEnviados) : null,
         fechaDespacho: data.fechaDespacho ? new Date(data.fechaDespacho) : new Date(),
         exportable,
         recuperado,
@@ -171,6 +172,9 @@ export async function actualizarOrdenTrilla(id: string, data: ActualizarOrdenTri
   }
   if (data.tipoSaco !== undefined) {
     updateData.tipoSaco = data.tipoSaco ? data.tipoSaco.trim() : null;
+  }
+  if (data.sacosEnviados !== undefined) {
+    updateData.sacosEnviados = data.sacosEnviados != null ? Number(data.sacosEnviados) : null;
   }
   if (data.kilosEnviados !== undefined) {
     const kEnviados = Number(data.kilosEnviados);

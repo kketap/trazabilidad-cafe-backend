@@ -28,6 +28,7 @@ async function generarCodigoSecado(): Promise<string> {
 
     const numerosUsados = secadosExistentes
         .map((s) => {
+            if (!s.codigo) return 0;
             const partes = s.codigo.split("-");
             const num = Number(partes[1]);
             return Number.isNaN(num) ? 0 : num;

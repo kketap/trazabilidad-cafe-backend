@@ -150,11 +150,16 @@ model Secado {
   tempMinima       Float?
   tempMaxima       Float?
   lote             Lote          @relation(fields: [loteId], references: [id])
+  empaques         Empaque[]
 }
 
 model Empaque {
   id               Int       @id @default(autoincrement())
   loteId           Int
+  secadoId         Int?
+  tipoEmpaque      String?
+  cantidadEmpaques Int?
+  rendimiento      Float?
   fechaInicio      DateTime
   fechaFin         DateTime?
   kilosIngresados  Float
@@ -169,6 +174,7 @@ model Empaque {
   perfilSensorial  String?
   fueCatado        Boolean?
   lote             Lote      @relation(fields: [loteId], references: [id])
+  secado           Secado?   @relation(fields: [secadoId], references: [id])
 }
 
 model OrdenTrilla {
@@ -179,6 +185,7 @@ model OrdenTrilla {
   fechaIngreso    DateTime?
   calidad         String?
   tipoSaco        String?
+  sacosEnviados   Int?
   kilosEnviados   Float
   kilosNetos      Float?
   exportable      Float?
