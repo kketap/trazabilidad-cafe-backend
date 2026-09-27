@@ -41,7 +41,22 @@ export async function getOrdenTrillaPorId(req: Request, res: Response) {
 
 export async function createOrdenTrillaController(req: Request, res: Response) {
   try {
-    const { loteIds, kilosEnviados } = req.body;
+    const {
+      loteIds,
+      kilosEnviados,
+      codigoTrilla,
+      numeroGuia,
+      fechaDespacho,
+      exportable,
+      recuperado,
+      malla13,
+      segundaBuena,
+      segundaMala,
+      sucioEscojo,
+      cisco,
+      descarteMaquina,
+      cascarilla,
+    } = req.body;
 
     if (!Array.isArray(loteIds) || loteIds.length === 0) {
       res.status(400).json({ ok: false, message: "Debe seleccionar al menos un lote (loteIds)" });
@@ -53,7 +68,23 @@ export async function createOrdenTrillaController(req: Request, res: Response) {
       return;
     }
 
-    const orden = await crearOrdenTrilla(req.body);
+    const orden = await crearOrdenTrilla({
+      loteIds: loteIds.map((id) => Number(id)),
+      kilosEnviados: Number(kilosEnviados),
+      codigoTrilla: codigoTrilla ? String(codigoTrilla).trim() : undefined,
+      numeroGuia: numeroGuia ? String(numeroGuia).trim() : null,
+      fechaDespacho: fechaDespacho ? String(fechaDespacho) : undefined,
+      exportable: exportable !== undefined ? (exportable !== null ? Number(exportable) : null) : undefined,
+      recuperado: recuperado !== undefined ? (recuperado !== null ? Number(recuperado) : null) : undefined,
+      malla13: malla13 !== undefined ? (malla13 !== null ? Number(malla13) : null) : undefined,
+      segundaBuena: segundaBuena !== undefined ? (segundaBuena !== null ? Number(segundaBuena) : null) : undefined,
+      segundaMala: segundaMala !== undefined ? (segundaMala !== null ? Number(segundaMala) : null) : undefined,
+      sucioEscojo: sucioEscojo !== undefined ? (sucioEscojo !== null ? Number(sucioEscojo) : null) : undefined,
+      cisco: cisco !== undefined ? (cisco !== null ? Number(cisco) : null) : undefined,
+      descarteMaquina: descarteMaquina !== undefined ? (descarteMaquina !== null ? Number(descarteMaquina) : null) : undefined,
+      cascarilla: cascarilla !== undefined ? (cascarilla !== null ? Number(cascarilla) : null) : undefined,
+    });
+
     res.status(201).json({ ok: true, data: orden });
   } catch (error: any) {
     console.error("Error creando orden de trilla:", error);
@@ -73,7 +104,48 @@ export async function updateOrdenTrillaController(req: Request, res: Response) {
       return;
     }
 
-    const orden = await actualizarOrdenTrilla(id, req.body);
+    const {
+      codigoTrilla,
+      numeroGuia,
+      fechaDespacho,
+      fechaIngreso,
+      calidad,
+      tipoSaco,
+      kilosEnviados,
+      kilosNetos,
+      loteIds,
+      exportable,
+      recuperado,
+      malla13,
+      segundaBuena,
+      segundaMala,
+      sucioEscojo,
+      cisco,
+      descarteMaquina,
+      cascarilla,
+    } = req.body;
+
+    const orden = await actualizarOrdenTrilla(id, {
+      ...(codigoTrilla !== undefined && { codigoTrilla: String(codigoTrilla).trim() }),
+      ...(numeroGuia !== undefined && { numeroGuia: numeroGuia !== null ? String(numeroGuia).trim() : null }),
+      ...(fechaDespacho !== undefined && { fechaDespacho: String(fechaDespacho) }),
+      ...(fechaIngreso !== undefined && { fechaIngreso: fechaIngreso !== null ? String(fechaIngreso) : null }),
+      ...(calidad !== undefined && { calidad: calidad !== null ? String(calidad).trim() : null }),
+      ...(tipoSaco !== undefined && { tipoSaco: tipoSaco !== null ? String(tipoSaco).trim() : null }),
+      ...(kilosEnviados !== undefined && { kilosEnviados: Number(kilosEnviados) }),
+      ...(kilosNetos !== undefined && { kilosNetos: kilosNetos !== null ? Number(kilosNetos) : null }),
+      ...(loteIds !== undefined && { loteIds: Array.isArray(loteIds) ? loteIds.map((lId) => Number(lId)) : [] }),
+      ...(exportable !== undefined && { exportable: exportable !== null ? Number(exportable) : null }),
+      ...(recuperado !== undefined && { recuperado: recuperado !== null ? Number(recuperado) : null }),
+      ...(malla13 !== undefined && { malla13: malla13 !== null ? Number(malla13) : null }),
+      ...(segundaBuena !== undefined && { segundaBuena: segundaBuena !== null ? Number(segundaBuena) : null }),
+      ...(segundaMala !== undefined && { segundaMala: segundaMala !== null ? Number(segundaMala) : null }),
+      ...(sucioEscojo !== undefined && { sucioEscojo: sucioEscojo !== null ? Number(sucioEscojo) : null }),
+      ...(cisco !== undefined && { cisco: cisco !== null ? Number(cisco) : null }),
+      ...(descarteMaquina !== undefined && { descarteMaquina: descarteMaquina !== null ? Number(descarteMaquina) : null }),
+      ...(cascarilla !== undefined && { cascarilla: cascarilla !== null ? Number(cascarilla) : null }),
+    });
+
     res.json({ ok: true, data: orden });
   } catch (error: any) {
     console.error("Error actualizando orden de trilla:", error);

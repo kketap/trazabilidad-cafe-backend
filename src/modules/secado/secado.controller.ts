@@ -41,21 +41,62 @@ export async function getSecadoById(req: Request, res: Response) {
 
 export async function createSecado(req: Request, res: Response) {
     try {
-        const { loteId, fechaInicio, kilosIngresados, kilosResultantes } = req.body;
+        const {
+            loteId,
+            fechaInicio,
+            fechaFin,
+            kilosIngresados,
+            kilosResultantes,
+            observaciones,
+            perfilProceso,
+            secadora,
+            tempMinima,
+            tempMaxima,
+        } = req.body;
 
-        if (!loteId || !fechaInicio || kilosIngresados === undefined || kilosResultantes === undefined) {
+        if (
+            !loteId ||
+            !fechaInicio ||
+            kilosIngresados === undefined ||
+            kilosResultantes === undefined
+        ) {
             res.status(400).json({
                 ok: false,
-                message: "Los campos 'loteId', 'fechaInicio', 'kilosIngresados' y 'kilosResultantes' son obligatorios",
+                message:
+                    "Los campos 'loteId', 'fechaInicio', 'kilosIngresados' y 'kilosResultantes' son obligatorios",
             });
             return;
         }
 
-        const secado = await crearSecado(req.body);
+        const secado = await crearSecado({
+            loteId: Number(loteId),
+            fechaInicio: String(fechaInicio),
+            fechaFin: fechaFin ? String(fechaFin) : null,
+            kilosIngresados: Number(kilosIngresados),
+            kilosResultantes: Number(kilosResultantes),
+            observaciones: observaciones || null,
+            perfilProceso: perfilProceso || null,
+            secadora:
+                secadora !== undefined && secadora !== null
+                    ? String(secadora)
+                    : null,
+            tempMinima:
+                tempMinima !== undefined && tempMinima !== null
+                    ? Number(tempMinima)
+                    : null,
+            tempMaxima:
+                tempMaxima !== undefined && tempMaxima !== null
+                    ? Number(tempMaxima)
+                    : null,
+        });
+
         res.status(201).json({ ok: true, data: secado });
     } catch (error: any) {
         console.error("Error creando proceso de secado:", error);
-        res.status(400).json({ ok: false, message: error.message || "Error creando proceso de secado" });
+        res.status(400).json({
+            ok: false,
+            message: error.message || "Error creando proceso de secado",
+        });
     }
 }
 
@@ -67,11 +108,49 @@ export async function updateSecado(req: Request, res: Response) {
             return;
         }
 
-        const secado = await actualizarSecado(id, req.body);
+        const {
+            loteId,
+            fechaInicio,
+            fechaFin,
+            kilosIngresados,
+            kilosResultantes,
+            observaciones,
+            perfilProceso,
+            secadora,
+            tempMinima,
+            tempMaxima,
+        } = req.body;
+
+        const secado = await actualizarSecado(id, {
+            ...(loteId !== undefined && { loteId: Number(loteId) }),
+            ...(fechaInicio !== undefined && { fechaInicio }),
+            ...(fechaFin !== undefined && { fechaFin }),
+            ...(kilosIngresados !== undefined && {
+                kilosIngresados: Number(kilosIngresados),
+            }),
+            ...(kilosResultantes !== undefined && {
+                kilosResultantes: Number(kilosResultantes),
+            }),
+            ...(observaciones !== undefined && { observaciones }),
+            ...(perfilProceso !== undefined && { perfilProceso }),
+            ...(secadora !== undefined && {
+                secadora: secadora !== null ? String(secadora) : null,
+            }),
+            ...(tempMinima !== undefined && {
+                tempMinima: tempMinima !== null ? Number(tempMinima) : null,
+            }),
+            ...(tempMaxima !== undefined && {
+                tempMaxima: tempMaxima !== null ? Number(tempMaxima) : null,
+            }),
+        });
+
         res.json({ ok: true, data: secado });
     } catch (error: any) {
         console.error("Error actualizando proceso de secado:", error);
-        res.status(400).json({ ok: false, message: error.message || "Error actualizando proceso de secado" });
+        res.status(400).json({
+            ok: false,
+            message: error.message || "Error actualizando proceso de secado",
+        });
     }
 }
 

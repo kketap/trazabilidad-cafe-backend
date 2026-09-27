@@ -25,6 +25,18 @@ type ProcesoInput = {
     kilosResultantes: number;
 
     codigo?: string;
+    duracionHoras?: number;
+    fechaInicio?: string | null;
+    fechaFin?: string | null;
+    gradosBrix?: number | null;
+    nivelPh?: number | null;
+    tempMaxima?: number | null;
+    tempMinima?: number | null;
+    tanqueFermentacion?: string | null;
+    inicioFermentacion?: string | Date | null;
+    finFermentacion?: string | Date | null;
+    fueDespulpado?: boolean | null;
+    fueLavado?: boolean | null;
 };
 
 type ResumenFiltros = {
@@ -323,6 +335,37 @@ export async function crearProceso(data: ProcesoInput) {
                 kilosResultantes,
                 loteId: loteIdFinal,
                 cosechaId: cosechaIdFinal,
+                gradosBrix:
+                    data.gradosBrix !== undefined && data.gradosBrix !== null
+                        ? Number(data.gradosBrix)
+                        : null,
+                nivelPh:
+                    data.nivelPh !== undefined && data.nivelPh !== null
+                        ? Number(data.nivelPh)
+                        : null,
+                tempMaxima:
+                    data.tempMaxima !== undefined && data.tempMaxima !== null
+                        ? Number(data.tempMaxima)
+                        : null,
+                tempMinima:
+                    data.tempMinima !== undefined && data.tempMinima !== null
+                        ? Number(data.tempMinima)
+                        : null,
+                tanqueFermentacion: data.tanqueFermentacion?.trim() || null,
+                inicioFermentacion: data.inicioFermentacion
+                    ? new Date(data.inicioFermentacion)
+                    : null,
+                finFermentacion: data.finFermentacion
+                    ? new Date(data.finFermentacion)
+                    : null,
+                fueDespulpado:
+                    data.fueDespulpado !== undefined && data.fueDespulpado !== null
+                        ? Boolean(data.fueDespulpado)
+                        : null,
+                fueLavado:
+                    data.fueLavado !== undefined && data.fueLavado !== null
+                        ? Boolean(data.fueLavado)
+                        : null,
             },
             include: procesoInclude,
         });
@@ -542,12 +585,51 @@ export async function actualizarProceso(
             ...(fechaFin !== undefined && {
                 fechaFin,
             }),
+            ...(data.gradosBrix !== undefined && {
+                gradosBrix:
+                    data.gradosBrix !== null ? Number(data.gradosBrix) : null,
+            }),
+            ...(data.nivelPh !== undefined && {
+                nivelPh:
+                    data.nivelPh !== null ? Number(data.nivelPh) : null,
+            }),
+            ...(data.tempMaxima !== undefined && {
+                tempMaxima:
+                    data.tempMaxima !== null ? Number(data.tempMaxima) : null,
+            }),
+            ...(data.tempMinima !== undefined && {
+                tempMinima:
+                    data.tempMinima !== null ? Number(data.tempMinima) : null,
+            }),
+            ...(data.tanqueFermentacion !== undefined && {
+                tanqueFermentacion:
+                    data.tanqueFermentacion !== null
+                        ? data.tanqueFermentacion.trim()
+                        : null,
+            }),
+            ...(data.inicioFermentacion !== undefined && {
+                inicioFermentacion: data.inicioFermentacion
+                    ? new Date(data.inicioFermentacion)
+                    : null,
+            }),
+            ...(data.finFermentacion !== undefined && {
+                finFermentacion: data.finFermentacion
+                    ? new Date(data.finFermentacion)
+                    : null,
+            }),
+            ...(data.fueDespulpado !== undefined && {
+                fueDespulpado:
+                    data.fueDespulpado !== null
+                        ? Boolean(data.fueDespulpado)
+                        : null,
+            }),
+            ...(data.fueLavado !== undefined && {
+                fueLavado:
+                    data.fueLavado !== null
+                        ? Boolean(data.fueLavado)
+                        : null,
+            }),
         },
-
-        /*
-         * La edición debe devolver las mismas relaciones que creación
-         * y listado para que la tabla no pierda el lote o la cosecha.
-         */
         include: procesoInclude,
     });
 }

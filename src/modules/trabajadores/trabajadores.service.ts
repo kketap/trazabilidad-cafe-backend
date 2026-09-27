@@ -14,9 +14,10 @@ export type UpdateTrabajadorInput = Partial<CreateTrabajadorInput>;
 
 export async function listarTrabajadores() {
   return prisma.trabajador.findMany({
-    orderBy: {
-      nombres: "asc",
-    },
+    orderBy: [
+      { nombres: "asc" },
+      { apellidos: "asc" },
+    ],
   });
 }
 
