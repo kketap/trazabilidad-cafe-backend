@@ -1,4 +1,3 @@
-// src/modules/trazabilidad/trazabilidad.service.ts
 import { TipoProceso } from "@prisma/client";
 
 import { prisma } from "../../config/prisma";
@@ -11,30 +10,45 @@ import { prisma } from "../../config/prisma";
  */
 type ProcesoInput = {
     fecha: string;
+
     fechaInicio?: string | null;
     fechaFin?: string | null;
+
     duracionHoras?: number;
 
     loteId?: number | null;
     cosechaId?: number | null;
 
     etapa?: string | null;
-    tipoProceso?: TipoProceso | string | null;
+
+    tipoProceso?:
+    | TipoProceso
+    | string
+    | null;
 
     kilosIngresados: number;
     kilosResultantes: number;
 
     codigo?: string;
-    duracionHoras?: number;
-    fechaInicio?: string | null;
-    fechaFin?: string | null;
+
     gradosBrix?: number | null;
     nivelPh?: number | null;
+
     tempMaxima?: number | null;
     tempMinima?: number | null;
+
     tanqueFermentacion?: string | null;
-    inicioFermentacion?: string | Date | null;
-    finFermentacion?: string | Date | null;
+
+    inicioFermentacion?:
+    | string
+    | Date
+    | null;
+
+    finFermentacion?:
+    | string
+    | Date
+    | null;
+
     fueDespulpado?: boolean | null;
     fueLavado?: boolean | null;
 };
@@ -52,6 +66,7 @@ type ResumenFiltros = {
  */
 const procesoInclude = {
     cosecha: true,
+
     Lote: {
         include: {
             cosechaLotes: {
@@ -63,40 +78,87 @@ const procesoInclude = {
     },
 };
 
+/**
+ * Calcula la duración entre dos fechas en horas.
+ *
+ * El resultado se redondea a dos decimales para mantener
+ * consistencia con el frontend.
+ *
+ * Ejemplo:
+ * 50 h 52 min -> 50.87
+ */
 function calculateDurationHours(
     start?: string | Date | null,
     end?: string | Date | null,
     fallback = 0,
 ): number {
     if (start && end) {
-        const startTime = new Date(start).getTime();
-        const endTime = new Date(end).getTime();
-        const difference = endTime - startTime;
+        const startTime =
+            new Date(start).getTime();
+
+        const endTime =
+            new Date(end).getTime();
+
+        const difference =
+            endTime - startTime;
 
         if (difference > 0) {
-            return difference / (1000 * 60 * 60);
+            const horas =
+                difference /
+                (1000 * 60 * 60);
+
+            return Number(
+                horas.toFixed(2),
+            );
         }
     }
 
     return fallback;
 }
 
-function getFechaKey(value: string | Date): string {
-    const fecha = value instanceof Date ? value : new Date(value);
+function getFechaKey(
+    value: string | Date,
+): string {
+    const fecha =
+        value instanceof Date
+            ? value
+            : new Date(value);
 
-    const year = fecha.getFullYear();
-    const month = String(fecha.getMonth() + 1).padStart(2, "0");
-    const day = String(fecha.getDate()).padStart(2, "0");
+    const year =
+        fecha.getFullYear();
+
+    const month =
+        String(
+            fecha.getMonth() + 1,
+        ).padStart(2, "0");
+
+    const day =
+        String(
+            fecha.getDate(),
+        ).padStart(2, "0");
 
     return `${year}-${month}-${day}`;
 }
 
-function getDateRange(fecha: Date) {
-    const desde = new Date(fecha);
-    desde.setHours(0, 0, 0, 0);
+function getDateRange(
+    fecha: Date,
+) {
+    const desde =
+        new Date(fecha);
 
-    const hasta = new Date(desde);
-    hasta.setDate(hasta.getDate() + 1);
+    desde.setHours(
+        0,
+        0,
+        0,
+        0,
+    );
+
+    const hasta =
+        new Date(desde);
+
+    hasta.setDate(
+        hasta.getDate() + 1,
+    );
 
     return {
         desde,
@@ -104,36 +166,124 @@ function getDateRange(fecha: Date) {
     };
 }
 
-function buildProcesoCode(fecha: Date, correlativo: number): string {
-    const year = fecha.getFullYear();
-    const month = String(fecha.getMonth() + 1).padStart(2, "0");
-    const day = String(fecha.getDate()).padStart(2, "0");
+function buildProcesoCode(
+    fecha: Date,
+    correlativo: number,
+): string {
+    const year =
+        fecha.getFullYear();
 
-    return `PRO-${year}${month}${day}-${String(correlativo).padStart(4, "0")}`;
+    const month =
+        String(
+            fecha.getMonth() + 1,
+        ).padStart(2, "0");
+
+    const day =
+        String(
+            fecha.getDate(),
+        ).padStart(2, "0");
+
+    return `PRO-${year}${month}${day}-${String(
+        correlativo,
+    ).padStart(4, "0")}`;
 }
 
 function normalizeTipoProceso(
-    tipoProceso?: TipoProceso | string | null,
+    tipoProceso?:
+        | TipoProceso
+        | string
+        | null,
 ): TipoProceso | null {
     if (!tipoProceso) {
         return null;
     }
 
-    if (!Object.values(TipoProceso).includes(tipoProceso as TipoProceso)) {
-        throw new Error("El tipo de proceso no es válido");
+    if (
+        !Object.values(
+            TipoProceso,
+        ).includes(
+            tipoProceso as TipoProceso,
+        )
+    ) {
+        throw new Error(
+            "El tipo de proceso no es válido",
+        );
     }
 
     return tipoProceso as TipoProceso;
 }
 
-function parseFecha(value: string, nombreCampo: string): Date {
-    const fecha = new Date(value);
+function parseFecha(
+    value: string,
+    nombreCampo: string,
+): Date {
+    const fecha =
+        new Date(value);
 
-    if (Number.isNaN(fecha.getTime())) {
-        throw new Error(`${nombreCampo} no es válida`);
+    if (
+        Number.isNaN(
+            fecha.getTime(),
+        )
+    ) {
+        throw new Error(
+            `${nombreCampo} no es válida`,
+        );
     }
 
     return fecha;
+}
+
+/**
+ * Convierte de forma segura una fecha opcional.
+ */
+function parseFechaOpcional(
+    value: string | Date | null | undefined,
+    nombreCampo: string,
+): Date | null {
+    if (
+        value === undefined ||
+        value === null
+    ) {
+        return null;
+    }
+
+    const fecha =
+        value instanceof Date
+            ? new Date(
+                value.getTime(),
+            )
+            : new Date(value);
+
+    if (
+        Number.isNaN(
+            fecha.getTime(),
+        )
+    ) {
+        throw new Error(
+            `${nombreCampo} no es válida`,
+        );
+    }
+
+    return fecha;
+}
+
+/**
+ * Valida el rango temporal de fermentación.
+ */
+function validarRangoFermentacion(
+    inicio: Date | null,
+    fin: Date | null,
+): void {
+    if (
+        inicio &&
+        fin &&
+        fin.getTime() <=
+        inicio.getTime()
+    ) {
+        throw new Error(
+            "El fin de fermentación debe ser posterior al inicio",
+        );
+    }
 }
 
 /**
@@ -144,27 +294,46 @@ function parseFecha(value: string, nombreCampo: string): Date {
  */
 function validarKilos(
     kilosIngresados: number,
-    kilosResultantes: number | null,
+    kilosResultantes:
+        | number
+        | null,
 ): void {
-    if (!Number.isFinite(kilosIngresados) || kilosIngresados <= 0) {
-        throw new Error("Los kilos ingresados deben ser mayores que cero");
+    if (
+        !Number.isFinite(
+            kilosIngresados,
+        ) ||
+        kilosIngresados <= 0
+    ) {
+        throw new Error(
+            "Los kilos ingresados deben ser mayores que cero",
+        );
     }
 
     /*
      * Se permite null solamente para conservar registros históricos.
      * Los procesos nuevos siempre deben enviar kilosResultantes.
      */
-    if (kilosResultantes === null) {
+    if (
+        kilosResultantes === null
+    ) {
         return;
     }
 
-    if (!Number.isFinite(kilosResultantes) || kilosResultantes < 0) {
+    if (
+        !Number.isFinite(
+            kilosResultantes,
+        ) ||
+        kilosResultantes < 0
+    ) {
         throw new Error(
             "Los kilos resultantes deben ser iguales o mayores que cero",
         );
     }
 
-    if (kilosResultantes > kilosIngresados) {
+    if (
+        kilosResultantes >
+        kilosIngresados
+    ) {
         throw new Error(
             "Los kilos resultantes no pueden superar los kilos ingresados",
         );
@@ -173,92 +342,191 @@ function validarKilos(
 
 export async function listarProcesos() {
     return prisma.procesoTrazabilidad.findMany({
-        include: procesoInclude,
+        include:
+            procesoInclude,
+
         orderBy: {
             fecha: "desc",
         },
     });
 }
 
-export async function crearProceso(data: ProcesoInput) {
-    const kilosIngresados = Number(data.kilosIngresados);
-    const kilosResultantes = Number(data.kilosResultantes);
+export async function crearProceso(
+    data: ProcesoInput,
+) {
+    const kilosIngresados =
+        Number(
+            data.kilosIngresados,
+        );
 
-    validarKilos(kilosIngresados, kilosResultantes);
+    const kilosResultantes =
+        Number(
+            data.kilosResultantes,
+        );
 
-    const fecha = parseFecha(data.fecha, "La fecha del proceso");
+    validarKilos(
+        kilosIngresados,
+        kilosResultantes,
+    );
 
-    const fechaInicio = data.fechaInicio
-        ? parseFecha(data.fechaInicio, "La fecha de inicio")
-        : null;
+    const fecha =
+        parseFecha(
+            data.fecha,
+            "La fecha del proceso",
+        );
 
-    const fechaFin = data.fechaFin
-        ? parseFecha(data.fechaFin, "La fecha de término")
-        : null;
+    /*
+     * Fechas históricas / generales del proceso.
+     * Se conservan para compatibilidad.
+     */
+    const fechaInicio =
+        data.fechaInicio
+            ? parseFecha(
+                data.fechaInicio,
+                "La fecha de inicio",
+            )
+            : null;
+
+    const fechaFin =
+        data.fechaFin
+            ? parseFecha(
+                data.fechaFin,
+                "La fecha de término",
+            )
+            : null;
 
     if (
         fechaInicio &&
         fechaFin &&
-        fechaFin.getTime() <= fechaInicio.getTime()
+        fechaFin.getTime() <=
+        fechaInicio.getTime()
     ) {
         throw new Error(
             "La fecha de término debe ser posterior a la fecha de inicio",
         );
     }
 
-    const duracionHoras = calculateDurationHours(
-        fechaInicio,
-        fechaFin,
-        data.duracionHoras !== undefined
-            ? Number(data.duracionHoras)
-            : 0,
+    /*
+     * Fechas reales de fermentación.
+     */
+    const inicioFermentacion =
+        parseFechaOpcional(
+            data.inicioFermentacion,
+            "La fecha de inicio de fermentación",
+        );
+
+    const finFermentacion =
+        parseFechaOpcional(
+            data.finFermentacion,
+            "La fecha de fin de fermentación",
+        );
+
+    validarRangoFermentacion(
+        inicioFermentacion,
+        finFermentacion,
     );
 
-    if (!Number.isFinite(duracionHoras) || duracionHoras < 0) {
-        throw new Error("La duración del proceso no es válida");
+    /*
+     * La duración se calcula prioritariamente
+     * desde inicioFermentacion y finFermentacion.
+     *
+     * Para registros antiguos que no tengan ambas fechas,
+     * se conserva el cálculo anterior usando fechaInicio /
+     * fechaFin o, finalmente, duracionHoras recibido.
+     */
+    const duracionHoras =
+        inicioFermentacion &&
+            finFermentacion
+            ? calculateDurationHours(
+                inicioFermentacion,
+                finFermentacion,
+            )
+            : calculateDurationHours(
+                fechaInicio,
+                fechaFin,
+                data.duracionHoras !==
+                    undefined
+                    ? Number(
+                        data.duracionHoras,
+                    )
+                    : 0,
+            );
+
+    if (
+        !Number.isFinite(
+            duracionHoras,
+        ) ||
+        duracionHoras < 0
+    ) {
+        throw new Error(
+            "La duración del proceso no es válida",
+        );
     }
 
-    const tipoProceso = normalizeTipoProceso(data.tipoProceso);
+    const tipoProceso =
+        normalizeTipoProceso(
+            data.tipoProceso,
+        );
 
     let cosechaIdFinal =
-        data.cosechaId !== undefined && data.cosechaId !== null
-            ? Number(data.cosechaId)
+        data.cosechaId !==
+            undefined &&
+            data.cosechaId !== null
+            ? Number(
+                data.cosechaId,
+            )
             : null;
 
     const loteIdFinal =
-        data.loteId !== undefined && data.loteId !== null
-            ? Number(data.loteId)
+        data.loteId !==
+            undefined &&
+            data.loteId !== null
+            ? Number(
+                data.loteId,
+            )
             : null;
 
-    if (loteIdFinal !== null) {
-        const lote = await prisma.lote.findUnique({
-            where: {
-                id: loteIdFinal,
-            },
-            include: {
-                cosechaLotes: {
-                    include: {
-                        cosecha: true,
+    if (
+        loteIdFinal !== null
+    ) {
+        const lote =
+            await prisma.lote.findUnique({
+                where: {
+                    id: loteIdFinal,
+                },
+
+                include: {
+                    cosechaLotes: {
+                        include: {
+                            cosecha: true,
+                        },
                     },
                 },
-            },
-        });
+            });
 
         if (!lote) {
-            throw new Error("El lote seleccionado no existe");
+            throw new Error(
+                "El lote seleccionado no existe",
+            );
         }
 
         if (!lote.activo) {
-            throw new Error("El lote seleccionado se encuentra inactivo");
+            throw new Error(
+                "El lote seleccionado se encuentra inactivo",
+            );
         }
 
         const kilosDisponibles =
-            lote.kilosActuales ?? lote.kilosIniciales;
+            lote.kilosActuales ??
+            lote.kilosIniciales;
 
         if (
-            kilosDisponibles !== null &&
-            kilosDisponibles !== undefined &&
-            kilosIngresados > kilosDisponibles
+            kilosDisponibles !==
+            null &&
+            kilosDisponibles !==
+            undefined &&
+            kilosIngresados >
+            kilosDisponibles
         ) {
             throw new Error(
                 `Los kilos ingresados no pueden superar los kilos disponibles del lote (${kilosDisponibles} kg)`,
@@ -269,107 +537,203 @@ export async function crearProceso(data: ProcesoInput) {
          * Si no se envía cosechaId, intenta encontrar una cosecha del lote
          * cuya fecha coincida con la fecha registrada para el proceso.
          */
-        if (cosechaIdFinal === null) {
-            const fechaProcesoKey = getFechaKey(fecha);
+        if (
+            cosechaIdFinal ===
+            null
+        ) {
+            const fechaProcesoKey =
+                getFechaKey(
+                    fecha,
+                );
 
-            const cosechaRelacionada = lote.cosechaLotes.find(
-                (relacion) =>
-                    getFechaKey(relacion.cosecha.fecha) ===
-                    fechaProcesoKey,
-            );
+            const cosechaRelacionada =
+                lote.cosechaLotes.find(
+                    (relacion) =>
+                        getFechaKey(
+                            relacion.cosecha
+                                .fecha,
+                        ) ===
+                        fechaProcesoKey,
+                );
 
-            if (cosechaRelacionada) {
-                cosechaIdFinal = cosechaRelacionada.cosechaId;
+            if (
+                cosechaRelacionada
+            ) {
+                cosechaIdFinal =
+                    cosechaRelacionada.cosechaId;
             }
         }
     }
 
-    return prisma.$transaction(async (tx) => {
-        let codigo = data.codigo?.trim();
+    return prisma.$transaction(
+        async (tx) => {
+            let codigo =
+                data.codigo?.trim();
 
-        if (!codigo) {
-            const { desde, hasta } = getDateRange(fecha);
+            if (!codigo) {
+                const {
+                    desde,
+                    hasta,
+                } =
+                    getDateRange(
+                        fecha,
+                    );
 
-            const cantidadProcesosDia =
-                await tx.procesoTrazabilidad.count({
-                    where: {
-                        fecha: {
-                            gte: desde,
-                            lt: hasta,
+                const cantidadProcesosDia =
+                    await tx.procesoTrazabilidad.count(
+                        {
+                            where: {
+                                fecha: {
+                                    gte: desde,
+                                    lt: hasta,
+                                },
+                            },
                         },
-                    },
-                });
+                    );
 
-            let correlativo = cantidadProcesosDia + 1;
-            codigo = buildProcesoCode(fecha, correlativo);
+                let correlativo =
+                    cantidadProcesosDia +
+                    1;
 
-            /*
-             * Evita una colisión si hubo eliminaciones o creaciones
-             * concurrentes que dejaron ocupado el correlativo calculado.
-             */
-            while (
-                await tx.procesoTrazabilidad.findUnique({
-                    where: {
-                        codigo,
-                    },
-                    select: {
-                        id: true,
-                    },
-                })
-            ) {
-                correlativo += 1;
-                codigo = buildProcesoCode(fecha, correlativo);
+                codigo =
+                    buildProcesoCode(
+                        fecha,
+                        correlativo,
+                    );
+
+                /*
+                 * Evita una colisión si hubo eliminaciones o creaciones
+                 * concurrentes que dejaron ocupado el correlativo calculado.
+                 */
+                while (
+                    await tx.procesoTrazabilidad.findUnique(
+                        {
+                            where: {
+                                codigo,
+                            },
+
+                            select: {
+                                id: true,
+                            },
+                        },
+                    )
+                ) {
+                    correlativo += 1;
+
+                    codigo =
+                        buildProcesoCode(
+                            fecha,
+                            correlativo,
+                        );
+                }
             }
-        }
 
-        return tx.procesoTrazabilidad.create({
-            data: {
-                codigo,
-                fecha,
-                fechaInicio,
-                fechaFin,
-                duracionHoras,
-                etapa: data.etapa?.trim() || null,
-                tipoProceso,
-                kilosIngresados,
-                kilosResultantes,
-                loteId: loteIdFinal,
-                cosechaId: cosechaIdFinal,
-                gradosBrix:
-                    data.gradosBrix !== undefined && data.gradosBrix !== null
-                        ? Number(data.gradosBrix)
-                        : null,
-                nivelPh:
-                    data.nivelPh !== undefined && data.nivelPh !== null
-                        ? Number(data.nivelPh)
-                        : null,
-                tempMaxima:
-                    data.tempMaxima !== undefined && data.tempMaxima !== null
-                        ? Number(data.tempMaxima)
-                        : null,
-                tempMinima:
-                    data.tempMinima !== undefined && data.tempMinima !== null
-                        ? Number(data.tempMinima)
-                        : null,
-                tanqueFermentacion: data.tanqueFermentacion?.trim() || null,
-                inicioFermentacion: data.inicioFermentacion
-                    ? new Date(data.inicioFermentacion)
-                    : null,
-                finFermentacion: data.finFermentacion
-                    ? new Date(data.finFermentacion)
-                    : null,
-                fueDespulpado:
-                    data.fueDespulpado !== undefined && data.fueDespulpado !== null
-                        ? Boolean(data.fueDespulpado)
-                        : null,
-                fueLavado:
-                    data.fueLavado !== undefined && data.fueLavado !== null
-                        ? Boolean(data.fueLavado)
-                        : null,
-            },
-            include: procesoInclude,
-        });
-    });
+            return tx.procesoTrazabilidad.create({
+                data: {
+                    codigo,
+
+                    fecha,
+
+                    fechaInicio,
+                    fechaFin,
+
+                    /*
+                     * Siempre se guarda la duración validada/calculada
+                     * por el backend.
+                     */
+                    duracionHoras,
+
+                    etapa:
+                        data.etapa?.trim() ||
+                        null,
+
+                    tipoProceso,
+
+                    kilosIngresados,
+                    kilosResultantes,
+
+                    loteId:
+                        loteIdFinal,
+
+                    cosechaId:
+                        cosechaIdFinal,
+
+                    gradosBrix:
+                        data.gradosBrix !==
+                            undefined &&
+                            data.gradosBrix !==
+                            null
+                            ? Number(
+                                data.gradosBrix,
+                            )
+                            : null,
+
+                    nivelPh:
+                        data.nivelPh !==
+                            undefined &&
+                            data.nivelPh !==
+                            null
+                            ? Number(
+                                data.nivelPh,
+                            )
+                            : null,
+
+                    tempMaxima:
+                        data.tempMaxima !==
+                            undefined &&
+                            data.tempMaxima !==
+                            null
+                            ? Number(
+                                data.tempMaxima,
+                            )
+                            : null,
+
+                    tempMinima:
+                        data.tempMinima !==
+                            undefined &&
+                            data.tempMinima !==
+                            null
+                            ? Number(
+                                data.tempMinima,
+                            )
+                            : null,
+
+                    tanqueFermentacion:
+                        data.tanqueFermentacion?.trim() ||
+                        null,
+
+                    /*
+                     * Utilizamos las fechas ya parseadas y validadas.
+                     */
+                    inicioFermentacion,
+                    finFermentacion,
+
+                    fueDespulpado:
+                        data.fueDespulpado !==
+                            undefined &&
+                            data.fueDespulpado !==
+                            null
+                            ? Boolean(
+                                data.fueDespulpado,
+                            )
+                            : null,
+
+                    fueLavado:
+                        data.fueLavado !==
+                            undefined &&
+                            data.fueLavado !==
+                            null
+                            ? Boolean(
+                                data.fueLavado,
+                            )
+                            : null,
+                },
+
+                include:
+                    procesoInclude,
+            });
+        },
+    );
 }
 
 export async function actualizarProceso(
@@ -377,14 +741,18 @@ export async function actualizarProceso(
     data: Partial<ProcesoInput>,
 ) {
     const procesoActual =
-        await prisma.procesoTrazabilidad.findUnique({
-            where: {
-                id,
+        await prisma.procesoTrazabilidad.findUnique(
+            {
+                where: {
+                    id,
+                },
             },
-        });
+        );
 
     if (!procesoActual) {
-        throw new Error("Proceso no encontrado");
+        throw new Error(
+            "Proceso no encontrado",
+        );
     }
 
     /*
@@ -392,29 +760,48 @@ export async function actualizarProceso(
      * también puede volver inválido el kilosResultantes que ya existía.
      */
     const kilosIngresadosFinal =
-        data.kilosIngresados !== undefined
-            ? Number(data.kilosIngresados)
+        data.kilosIngresados !==
+            undefined
+            ? Number(
+                data.kilosIngresados,
+            )
             : procesoActual.kilosIngresados;
 
     const kilosResultantesFinal =
-        data.kilosResultantes !== undefined
-            ? Number(data.kilosResultantes)
+        data.kilosResultantes !==
+            undefined
+            ? Number(
+                data.kilosResultantes,
+            )
             : procesoActual.kilosResultantes;
 
     validarKilos(
-        Number(kilosIngresadosFinal),
-        kilosResultantesFinal !== null
-            ? Number(kilosResultantesFinal)
+        Number(
+            kilosIngresadosFinal,
+        ),
+
+        kilosResultantesFinal !==
+            null
+            ? Number(
+                kilosResultantesFinal,
+            )
             : null,
     );
 
     const fecha =
         data.fecha !== undefined
-            ? parseFecha(data.fecha, "La fecha del proceso")
+            ? parseFecha(
+                data.fecha,
+                "La fecha del proceso",
+            )
             : undefined;
 
+    /*
+     * Fechas generales / históricas.
+     */
     const fechaInicio =
-        data.fechaInicio !== undefined
+        data.fechaInicio !==
+            undefined
             ? data.fechaInicio
                 ? parseFecha(
                     data.fechaInicio,
@@ -424,7 +811,8 @@ export async function actualizarProceso(
             : undefined;
 
     const fechaFin =
-        data.fechaFin !== undefined
+        data.fechaFin !==
+            undefined
             ? data.fechaFin
                 ? parseFecha(
                     data.fechaFin,
@@ -434,7 +822,8 @@ export async function actualizarProceso(
             : undefined;
 
     const fechaInicioFinal =
-        fechaInicio !== undefined
+        fechaInicio !==
+            undefined
             ? fechaInicio
             : procesoActual.fechaInicio;
 
@@ -446,46 +835,160 @@ export async function actualizarProceso(
     if (
         fechaInicioFinal &&
         fechaFinFinal &&
-        fechaFinFinal.getTime() <= fechaInicioFinal.getTime()
+        fechaFinFinal.getTime() <=
+        fechaInicioFinal.getTime()
     ) {
         throw new Error(
             "La fecha de término debe ser posterior a la fecha de inicio",
         );
     }
 
-    let duracionHoras: number | undefined;
+    /*
+     * Fechas de fermentación enviadas en esta actualización.
+     */
+    let inicioFermentacion:
+        | Date
+        | null
+        | undefined;
 
     if (
-        data.fechaInicio !== undefined ||
+        data.inicioFermentacion !==
+        undefined
+    ) {
+        inicioFermentacion =
+            data.inicioFermentacion ===
+                null
+                ? null
+                : parseFechaOpcional(
+                    data.inicioFermentacion,
+                    "La fecha de inicio de fermentación",
+                );
+    }
+
+    let finFermentacion:
+        | Date
+        | null
+        | undefined;
+
+    if (
+        data.finFermentacion !==
+        undefined
+    ) {
+        finFermentacion =
+            data.finFermentacion ===
+                null
+                ? null
+                : parseFechaOpcional(
+                    data.finFermentacion,
+                    "La fecha de fin de fermentación",
+                );
+    }
+
+    /*
+     * Valores finales después de combinar lo enviado
+     * con lo que ya existe en la base.
+     */
+    const inicioFermentacionFinal =
+        inicioFermentacion !==
+            undefined
+            ? inicioFermentacion
+            : procesoActual.inicioFermentacion;
+
+    const finFermentacionFinal =
+        finFermentacion !==
+            undefined
+            ? finFermentacion
+            : procesoActual.finFermentacion;
+
+    validarRangoFermentacion(
+        inicioFermentacionFinal,
+        finFermentacionFinal,
+    );
+
+    let duracionHoras:
+        | number
+        | undefined;
+
+    /*
+     * Si existen ambas fechas de fermentación,
+     * ellas siempre son la fuente oficial de la duración.
+     */
+    if (
+        inicioFermentacionFinal &&
+        finFermentacionFinal
+    ) {
+        duracionHoras =
+            calculateDurationHours(
+                inicioFermentacionFinal,
+                finFermentacionFinal,
+            );
+    }
+
+    /*
+     * Compatibilidad con procesos antiguos que todavía
+     * solamente utilizan fechaInicio / fechaFin.
+     */
+    else if (
+        data.fechaInicio !==
+        undefined ||
         data.fechaFin !== undefined
     ) {
-        duracionHoras = calculateDurationHours(
-            fechaInicioFinal,
-            fechaFinFinal,
-            data.duracionHoras !== undefined
-                ? Number(data.duracionHoras)
-                : procesoActual.duracionHoras,
-        );
-    } else if (data.duracionHoras !== undefined) {
-        duracionHoras = Number(data.duracionHoras);
+        duracionHoras =
+            calculateDurationHours(
+                fechaInicioFinal,
+                fechaFinFinal,
+
+                data.duracionHoras !==
+                    undefined
+                    ? Number(
+                        data.duracionHoras,
+                    )
+                    : procesoActual.duracionHoras,
+            );
+    }
+
+    /*
+     * Último fallback para registros antiguos.
+     */
+    else if (
+        data.duracionHoras !==
+        undefined
+    ) {
+        duracionHoras =
+            Number(
+                data.duracionHoras,
+            );
     }
 
     if (
-        duracionHoras !== undefined &&
-        (!Number.isFinite(duracionHoras) || duracionHoras < 0)
+        duracionHoras !==
+        undefined &&
+        (
+            !Number.isFinite(
+                duracionHoras,
+            ) ||
+            duracionHoras < 0
+        )
     ) {
-        throw new Error("La duración del proceso no es válida");
+        throw new Error(
+            "La duración del proceso no es válida",
+        );
     }
 
     const tipoProceso =
-        data.tipoProceso !== undefined
-            ? normalizeTipoProceso(data.tipoProceso)
+        data.tipoProceso !==
+            undefined
+            ? normalizeTipoProceso(
+                data.tipoProceso,
+            )
             : undefined;
 
     const loteIdFinal =
         data.loteId !== undefined
             ? data.loteId !== null
-                ? Number(data.loteId)
+                ? Number(
+                    data.loteId,
+                )
                 : null
             : procesoActual.loteId;
 
@@ -495,36 +998,51 @@ export async function actualizarProceso(
      */
     if (
         loteIdFinal !== null &&
-        (data.loteId !== undefined ||
-            data.kilosIngresados !== undefined)
+        (
+            data.loteId !==
+            undefined ||
+            data.kilosIngresados !==
+            undefined
+        )
     ) {
-        const lote = await prisma.lote.findUnique({
-            where: {
-                id: loteIdFinal,
-            },
-        });
+        const lote =
+            await prisma.lote.findUnique({
+                where: {
+                    id: loteIdFinal,
+                },
+            });
 
         if (!lote) {
-            throw new Error("El lote seleccionado no existe");
+            throw new Error(
+                "El lote seleccionado no existe",
+            );
         }
 
         /*
          * Se permite conservar el lote original si fue desactivado después
          * de registrar el proceso, pero no seleccionar otro lote inactivo.
          */
-        if (!lote.activo && lote.id !== procesoActual.loteId) {
+        if (
+            !lote.activo &&
+            lote.id !==
+            procesoActual.loteId
+        ) {
             throw new Error(
                 "El lote seleccionado se encuentra inactivo",
             );
         }
 
         const kilosDisponibles =
-            lote.kilosActuales ?? lote.kilosIniciales;
+            lote.kilosActuales ??
+            lote.kilosIniciales;
 
         if (
-            kilosDisponibles !== null &&
-            kilosDisponibles !== undefined &&
-            kilosIngresadosFinal > kilosDisponibles
+            kilosDisponibles !==
+            null &&
+            kilosDisponibles !==
+            undefined &&
+            kilosIngresadosFinal >
+            kilosDisponibles
         ) {
             throw new Error(
                 `Los kilos ingresados no pueden superar los kilos disponibles del lote (${kilosDisponibles} kg)`,
@@ -536,105 +1054,179 @@ export async function actualizarProceso(
         where: {
             id,
         },
+
         data: {
-            ...(fecha !== undefined && {
+            ...(fecha !==
+                undefined && {
                 fecha,
             }),
 
-            ...(data.loteId !== undefined && {
-                loteId: loteIdFinal,
+            ...(data.loteId !==
+                undefined && {
+                loteId:
+                    loteIdFinal,
             }),
 
-            ...(data.cosechaId !== undefined && {
+            ...(data.cosechaId !==
+                undefined && {
                 cosechaId:
-                    data.cosechaId !== null
-                        ? Number(data.cosechaId)
+                    data.cosechaId !==
+                        null
+                        ? Number(
+                            data.cosechaId,
+                        )
                         : null,
             }),
 
-            ...(data.etapa !== undefined && {
-                etapa: data.etapa?.trim() || null,
+            ...(data.etapa !==
+                undefined && {
+                etapa:
+                    data.etapa?.trim() ||
+                    null,
             }),
 
-            ...(tipoProceso !== undefined && {
+            ...(tipoProceso !==
+                undefined && {
                 tipoProceso,
             }),
 
-            ...(data.kilosIngresados !== undefined && {
-                kilosIngresados: kilosIngresadosFinal,
+            ...(data.kilosIngresados !==
+                undefined && {
+                kilosIngresados:
+                    kilosIngresadosFinal,
             }),
 
-            ...(data.kilosResultantes !== undefined && {
-                kilosResultantes: Number(
-                    data.kilosResultantes,
-                ),
+            ...(data.kilosResultantes !==
+                undefined && {
+                kilosResultantes:
+                    Number(
+                        data.kilosResultantes,
+                    ),
             }),
 
-            ...(data.codigo !== undefined && {
-                codigo: data.codigo.trim(),
+            ...(data.codigo !==
+                undefined && {
+                codigo:
+                    data.codigo.trim(),
             }),
 
-            ...(duracionHoras !== undefined && {
+            /*
+             * Si existen fechas de fermentación,
+             * duracionHoras fue recalculada por backend.
+             */
+            ...(duracionHoras !==
+                undefined && {
                 duracionHoras,
             }),
 
-            ...(fechaInicio !== undefined && {
+            ...(fechaInicio !==
+                undefined && {
                 fechaInicio,
             }),
 
-            ...(fechaFin !== undefined && {
+            ...(fechaFin !==
+                undefined && {
                 fechaFin,
             }),
-            ...(data.gradosBrix !== undefined && {
+
+            ...(data.gradosBrix !==
+                undefined && {
                 gradosBrix:
-                    data.gradosBrix !== null ? Number(data.gradosBrix) : null,
+                    data.gradosBrix !==
+                        null
+                        ? Number(
+                            data.gradosBrix,
+                        )
+                        : null,
             }),
-            ...(data.nivelPh !== undefined && {
+
+            ...(data.nivelPh !==
+                undefined && {
                 nivelPh:
-                    data.nivelPh !== null ? Number(data.nivelPh) : null,
+                    data.nivelPh !==
+                        null
+                        ? Number(
+                            data.nivelPh,
+                        )
+                        : null,
             }),
-            ...(data.tempMaxima !== undefined && {
+
+            ...(data.tempMaxima !==
+                undefined && {
                 tempMaxima:
-                    data.tempMaxima !== null ? Number(data.tempMaxima) : null,
+                    data.tempMaxima !==
+                        null
+                        ? Number(
+                            data.tempMaxima,
+                        )
+                        : null,
             }),
-            ...(data.tempMinima !== undefined && {
+
+            ...(data.tempMinima !==
+                undefined && {
                 tempMinima:
-                    data.tempMinima !== null ? Number(data.tempMinima) : null,
+                    data.tempMinima !==
+                        null
+                        ? Number(
+                            data.tempMinima,
+                        )
+                        : null,
             }),
-            ...(data.tanqueFermentacion !== undefined && {
+
+            ...(data.tanqueFermentacion !==
+                undefined && {
                 tanqueFermentacion:
-                    data.tanqueFermentacion !== null
+                    data.tanqueFermentacion !==
+                        null
                         ? data.tanqueFermentacion.trim()
                         : null,
             }),
-            ...(data.inicioFermentacion !== undefined && {
-                inicioFermentacion: data.inicioFermentacion
-                    ? new Date(data.inicioFermentacion)
-                    : null,
+
+            /*
+             * Utilizamos las fechas parseadas anteriormente,
+             * evitando convertirlas otra vez.
+             */
+            ...(inicioFermentacion !==
+                undefined && {
+                inicioFermentacion,
             }),
-            ...(data.finFermentacion !== undefined && {
-                finFermentacion: data.finFermentacion
-                    ? new Date(data.finFermentacion)
-                    : null,
+
+            ...(finFermentacion !==
+                undefined && {
+                finFermentacion,
             }),
-            ...(data.fueDespulpado !== undefined && {
+
+            ...(data.fueDespulpado !==
+                undefined && {
                 fueDespulpado:
-                    data.fueDespulpado !== null
-                        ? Boolean(data.fueDespulpado)
+                    data.fueDespulpado !==
+                        null
+                        ? Boolean(
+                            data.fueDespulpado,
+                        )
                         : null,
             }),
-            ...(data.fueLavado !== undefined && {
+
+            ...(data.fueLavado !==
+                undefined && {
                 fueLavado:
-                    data.fueLavado !== null
-                        ? Boolean(data.fueLavado)
+                    data.fueLavado !==
+                        null
+                        ? Boolean(
+                            data.fueLavado,
+                        )
                         : null,
             }),
         },
-        include: procesoInclude,
+
+        include:
+            procesoInclude,
     });
 }
 
-export async function eliminarProceso(id: number) {
+export async function eliminarProceso(
+    id: number,
+) {
     return prisma.procesoTrazabilidad.delete({
         where: {
             id,
@@ -645,75 +1237,119 @@ export async function eliminarProceso(id: number) {
 export async function obtenerResumenTrazabilidad(
     filtros: ResumenFiltros = {},
 ) {
-    const procesos = await prisma.procesoTrazabilidad.findMany({
-        where: {
-            ...(filtros.desde || filtros.hasta
-                ? {
-                    fecha: {
-                        ...(filtros.desde && {
-                            gte: filtros.desde,
-                        }),
-                        ...(filtros.hasta && {
-                            lt: filtros.hasta,
-                        }),
-                    },
-                }
-                : {}),
-        },
-        select: {
-            kilosIngresados: true,
-            kilosResultantes: true,
-        },
-    });
+    const procesos =
+        await prisma.procesoTrazabilidad.findMany(
+            {
+                where: {
+                    ...(filtros.desde ||
+                        filtros.hasta
+                        ? {
+                            fecha: {
+                                ...(filtros.desde && {
+                                    gte:
+                                        filtros.desde,
+                                }),
 
-    const totalIngresado = procesos.reduce(
-        (total, proceso) =>
-            total + Number(proceso.kilosIngresados),
-        0,
-    );
+                                ...(filtros.hasta && {
+                                    lt:
+                                        filtros.hasta,
+                                }),
+                            },
+                        }
+                        : {}),
+                },
+
+                select: {
+                    kilosIngresados:
+                        true,
+
+                    kilosResultantes:
+                        true,
+                },
+            },
+        );
+
+    const totalIngresado =
+        procesos.reduce(
+            (
+                total,
+                proceso,
+            ) =>
+                total +
+                Number(
+                    proceso.kilosIngresados,
+                ),
+
+            0,
+        );
 
     /*
      * Los procesos históricos sin kilosResultantes no participan en
      * el total resultante ni en el cálculo de merma.
      */
-    const procesosConResultado = procesos.filter(
-        (
-            proceso,
-        ): proceso is typeof proceso & {
-            kilosResultantes: number;
-        } => proceso.kilosResultantes !== null,
-    );
+    const procesosConResultado =
+        procesos.filter(
+            (
+                proceso,
+            ): proceso is typeof proceso & {
+                kilosResultantes: number;
+            } =>
+                proceso.kilosResultantes !==
+                null,
+        );
 
     const totalIngresadoConResultado =
         procesosConResultado.reduce(
-            (total, proceso) =>
-                total + Number(proceso.kilosIngresados),
+            (
+                total,
+                proceso,
+            ) =>
+                total +
+                Number(
+                    proceso.kilosIngresados,
+                ),
+
             0,
         );
 
-    const totalResultante = procesosConResultado.reduce(
-        (total, proceso) =>
-            total + Number(proceso.kilosResultantes),
-        0,
-    );
+    const totalResultante =
+        procesosConResultado.reduce(
+            (
+                total,
+                proceso,
+            ) =>
+                total +
+                Number(
+                    proceso.kilosResultantes,
+                ),
+
+            0,
+        );
 
     /*
      * La merma se calcula, pero no se almacena en ProcesoTrazabilidad.
      * Se utiliza una merma global ponderada según los kilos procesados.
      */
     const mermaPromedio =
-        totalIngresadoConResultado > 0
+        totalIngresadoConResultado >
+            0
             ? (
-                (totalIngresadoConResultado -
-                    totalResultante) /
+                (
+                    totalIngresadoConResultado -
+                    totalResultante
+                ) /
                 totalIngresadoConResultado
             ) * 100
             : 0;
 
     return {
-        totalProcesos: procesos.length,
+        totalProcesos:
+            procesos.length,
+
         totalIngresado,
+
         totalResultante,
+
         mermaPromedio,
     };
 }

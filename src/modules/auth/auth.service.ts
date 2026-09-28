@@ -10,13 +10,19 @@ import {
   hashRefreshToken,
 } from "./refresh-token.utils";
 
-const JWT_SECRET = process.env.JWT_SECRET;
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
 
-if (!JWT_SECRET) {
-  throw new Error(
-    "La variable JWT_SECRET no está configurada",
-  );
+  if (!secret) {
+    throw new Error(
+      "La variable JWT_SECRET no está configurada",
+    );
+  }
+
+  return secret;
 }
+
+const JWT_SECRET: string = getJwtSecret();
 
 const JWT_EXPIRES_IN =
   process.env.JWT_EXPIRES_IN || "15m";

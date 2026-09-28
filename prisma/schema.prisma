@@ -34,12 +34,12 @@ model Lote {
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
   estado              EstadoLote            @default(EN_PROCESO)
-  kilosIniciales      Float?
   kilosActuales       Float?
+  kilosIniciales      Float?
   saldoTemporal       Float?
   tipoCodigo          TipoCodigoLote        @default(COMERCIAL)
-  gradosBrix          Float?
   ordenTrillaId       String?
+  gradosBrix          Float?
   cosechaLotes        CosechaLote[]
   empaques            Empaque[]
   ordenTrilla         OrdenTrilla?          @relation(fields: [ordenTrillaId], references: [id])
@@ -59,13 +59,14 @@ model CosechaLote {
 }
 
 model Usuario {
-  id            Int            @id @default(autoincrement())
-  email         String         @unique
-  password      String
-  nombre        String
-  rol           String         @default("ADMIN")
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  nombre    String
+  rol       String   @default("ADMIN")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   refreshTokens RefreshToken[]
 }
 
@@ -77,7 +78,7 @@ model RefreshToken {
   revokedAt DateTime?
   createdAt DateTime  @default(now())
 
-  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
 
   @@index([usuarioId])
   @@index([expiresAt])
@@ -88,6 +89,7 @@ model ProcesoTrazabilidad {
   fecha              DateTime
   etapa              String?
   kilosIngresados    Float
+  kilosResultantes   Float?
   cosechaId          Int?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
@@ -97,15 +99,15 @@ model ProcesoTrazabilidad {
   fechaInicio        DateTime?
   fechaFin           DateTime?
   tipoProceso        TipoProceso?
-  gradosBrix         Float?
-  nivelPh            Float?
-  tempMaxima         Float?
-  tempMinima         Float?
-  tanqueFermentacion String?
-  inicioFermentacion DateTime?
   finFermentacion    DateTime?
   fueDespulpado      Boolean?
   fueLavado          Boolean?
+  gradosBrix         Float?
+  inicioFermentacion DateTime?
+  nivelPh            Float?
+  tanqueFermentacion String?
+  tempMaxima         Float?
+  tempMinima         Float?
   cosecha            Cosecha?     @relation(fields: [cosechaId], references: [id])
   Lote               Lote?        @relation(fields: [loteId], references: [id])
 }
@@ -151,7 +153,6 @@ model CosechaTrabajador {
 
 model Secado {
   id               Int           @id @default(autoincrement())
-  codigo           String?       @unique
   loteId           Int
   fechaInicio      DateTime
   fechaFin         DateTime?
@@ -163,19 +164,16 @@ model Secado {
   updatedAt        DateTime      @updatedAt
   perfilProceso    PerfilSecado?
   secadora         String?
-  tempMinima       Float?
   tempMaxima       Float?
-  lote             Lote          @relation(fields: [loteId], references: [id])
+  tempMinima       Float?
+  codigo           String?       @unique
   empaques         Empaque[]
+  lote             Lote          @relation(fields: [loteId], references: [id])
 }
 
 model Empaque {
   id               Int       @id @default(autoincrement())
   loteId           Int
-  secadoId         Int?
-  tipoEmpaque      String?
-  cantidadEmpaques Int?
-  rendimiento      Float?
   fechaInicio      DateTime
   fechaFin         DateTime?
   kilosIngresados  Float
@@ -184,11 +182,15 @@ model Empaque {
   observaciones    String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
-  humedad          Float?
   actividadAgua    Float?
-  puntajeSca       Float?
-  perfilSensorial  String?
   fueCatado        Boolean?
+  humedad          Float?
+  perfilSensorial  String?
+  puntajeSca       Float?
+  cantidadEmpaques Int?
+  rendimiento      Float?
+  secadoId         Int?
+  tipoEmpaque      String?
   lote             Lote      @relation(fields: [loteId], references: [id])
   secado           Secado?   @relation(fields: [secadoId], references: [id])
 }
@@ -196,25 +198,25 @@ model Empaque {
 model OrdenTrilla {
   id              String    @id @default(uuid())
   codigoTrilla    String    @unique
-  numeroGuia      String?
   fechaDespacho   DateTime
   fechaIngreso    DateTime?
   calidad         String?
   tipoSaco        String?
-  sacosEnviados   Int?
   kilosEnviados   Float
   kilosNetos      Float?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  cascarilla      Float?
+  cisco           Float?
+  descarteMaquina Float?
   exportable      Float?
-  recuperado      Float?
   malla13         Float?
+  numeroGuia      String?
+  recuperado      Float?
   segundaBuena    Float?
   segundaMala     Float?
   sucioEscojo     Float?
-  cisco           Float?
-  descarteMaquina Float?
-  cascarilla      Float?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  sacosEnviados   Int?
   lotes           Lote[]
   ventas          Venta[]
 }
