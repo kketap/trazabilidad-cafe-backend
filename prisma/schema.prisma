@@ -59,14 +59,13 @@ model CosechaLote {
 }
 
 model Usuario {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  nombre    String
-  rol       String   @default("ADMIN")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  password      String
+  nombre        String
+  rol           String         @default("ADMIN")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   refreshTokens RefreshToken[]
 }
 
@@ -77,8 +76,7 @@ model RefreshToken {
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
-
-  usuario Usuario @relation(fields: [usuarioId], references: [id])
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id])
 
   @@index([usuarioId])
   @@index([expiresAt])
@@ -89,7 +87,6 @@ model ProcesoTrazabilidad {
   fecha              DateTime
   etapa              String?
   kilosIngresados    Float
-  kilosResultantes   Float?
   cosechaId          Int?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
@@ -108,6 +105,7 @@ model ProcesoTrazabilidad {
   tanqueFermentacion String?
   tempMaxima         Float?
   tempMinima         Float?
+  kilosResultantes   Float?
   cosecha            Cosecha?     @relation(fields: [cosechaId], references: [id])
   Lote               Lote?        @relation(fields: [loteId], references: [id])
 }
