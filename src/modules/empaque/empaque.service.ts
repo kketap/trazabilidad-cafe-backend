@@ -2,8 +2,10 @@
 import { prisma } from "../../config/prisma";
 
 export type EmpaqueInput = {
+    codigo?: string | null;
     loteId: number;
     secadoId?: number | null;
+    secadoIds?: number[];
     fechaInicio: string | Date;
     fechaFin?: string | Date | null;
     kilosIngresados: number;
@@ -19,11 +21,43 @@ export type EmpaqueInput = {
     fueCatado?: boolean | null;
 };
 
+const empaqueIncludeDefault = {
+    lote: true,
+    secado: true,
+    empaqueSecados: {
+        include: {
+            secado: true,
+        },
+    },
+};
+
+/**
+ * Genera el siguiente código de empaque: EMP-001, EMP-002...
+ */
+async function generarCodigoEmpaque(): Promise<string> {
+    const empaquesExistentes = await prisma.empaque.findMany({
+        where: {
+            codigo: { startsWith: "EMP-" },
+        },
+        select: { codigo: true },
+    });
+
+    const numerosUsados = empaquesExistentes
+        .map((e) => {
+            if (!e.codigo) return 0;
+            const partes = e.codigo.split("-");
+            const num = Number(partes[partes.length - 1]);
+            return Number.isNaN(num) ? 0 : num;
+        })
+        .filter((n) => n > 0);
+
+    const siguiente = numerosUsados.length > 0 ? Math.max(...numerosUsados) + 1 : 1;
+    return `EMP-${String(siguiente).padStart(3, "0")}`;
+}
+
 export async function listarEmpaques() {
     return prisma.empaque.findMany({
-        include: {
-            lote: true,
-        },
+        include: empaqueIncludeDefault,
         orderBy: {
             id: "desc",
         },
@@ -33,9 +67,7 @@ export async function listarEmpaques() {
 export async function obtenerEmpaquePorId(id: number) {
     return prisma.empaque.findUnique({
         where: { id },
-        include: {
-            lote: true,
-        },
+        include: empaqueIncludeDefault,
     });
 }
 
@@ -43,6 +75,15 @@ export async function crearEmpaque(data: EmpaqueInput) {
     const kilosIngresados = Number(data.kilosIngresados);
     const kilosResultantes = Number(data.kilosResultantes);
     const merma = kilosIngresados - kilosResultantes;
+
+    const secadoIds =
+        Array.isArray(data.secadoIds) && data.secadoIds.length > 0
+            ? data.secadoIds.map(Number)
+            : data.secadoId
+                ? [Number(data.secadoId)]
+                : [];
+
+    const primarySecadoId = secadoIds.length > 0 ? secadoIds[0] : null;
 
     return prisma.$transaction(async (tx) => {
         const lote = await tx.lote.findUnique({
@@ -53,10 +94,13 @@ export async function crearEmpaque(data: EmpaqueInput) {
             throw new Error("Lote no encontrado");
         }
 
+        const codigo = data.codigo?.trim() || (await generarCodigoEmpaque());
+
         const empaque = await tx.empaque.create({
             data: {
+                codigo,
                 loteId: Number(data.loteId),
-                ...(data.secadoId ? { secadoId: Number(data.secadoId) } : {}),
+                secadoId: primarySecadoId,
                 fechaInicio: new Date(data.fechaInicio),
                 fechaFin: data.fechaFin ? new Date(data.fechaFin) : null,
                 kilosIngresados,
@@ -71,10 +115,16 @@ export async function crearEmpaque(data: EmpaqueInput) {
                 puntajeSca: data.puntajeSca != null ? Number(data.puntajeSca) : null,
                 perfilSensorial: data.perfilSensorial?.trim() || null,
                 fueCatado: data.fueCatado ?? null,
+                empaqueSecados:
+                    secadoIds.length > 0
+                        ? {
+                            create: secadoIds.map((secadoId) => ({
+                                secadoId,
+                            })),
+                        }
+                        : undefined,
             },
-            include: {
-                lote: true,
-            },
+            include: empaqueIncludeDefault,
         });
 
         await tx.lote.update({
@@ -104,9 +154,30 @@ export async function actualizarEmpaque(id: number, data: Partial<EmpaqueInput>)
         const merma = kilosIngresados - kilosResultantes;
         const loteId = data.loteId !== undefined ? Number(data.loteId) : empaqueExistente.loteId;
 
+        const secadoIds =
+            data.secadoIds !== undefined
+                ? data.secadoIds.map(Number)
+                : undefined;
+
+        if (secadoIds !== undefined) {
+            await tx.empaqueSecado.deleteMany({
+                where: { empaqueId: id },
+            });
+            if (secadoIds.length > 0) {
+                await tx.empaqueSecado.createMany({
+                    data: secadoIds.map((secadoId) => ({
+                        empaqueId: id,
+                        secadoId,
+                    })),
+                    skipDuplicates: true,
+                });
+            }
+        }
+
         const empaqueActualizado = await tx.empaque.update({
             where: { id },
             data: {
+                ...(data.codigo !== undefined && { codigo: data.codigo?.trim() || null }),
                 ...(loteId ? { lote: { connect: { id: loteId } } } : {}),
                 ...(data.secadoId !== undefined ? (data.secadoId ? { secado: { connect: { id: Number(data.secadoId) } } } : { secado: { disconnect: true } }) : {}),
                 fechaInicio: data.fechaInicio ? new Date(data.fechaInicio) : undefined,
@@ -124,9 +195,7 @@ export async function actualizarEmpaque(id: number, data: Partial<EmpaqueInput>)
                 ...(data.perfilSensorial !== undefined && { perfilSensorial: data.perfilSensorial?.trim() || null }),
                 ...(data.fueCatado !== undefined && { fueCatado: data.fueCatado }),
             },
-            include: {
-                lote: true,
-            },
+            include: empaqueIncludeDefault,
         });
 
         if (data.kilosResultantes !== undefined || data.loteId !== undefined) {

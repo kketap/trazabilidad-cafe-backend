@@ -4,6 +4,7 @@ import {
     crearCosecha,
     eliminarCosecha,
     listarCosechas,
+    listarCosechasConSaldo,
     obtenerResumenCosechas,
     obtenerReporteCosechas,
     actualizarCosecha,
@@ -31,6 +32,16 @@ export async function getCosechas(_req: Request, res: Response) {
     }
 }
 
+export async function getCosechasConSaldo(_req: Request, res: Response) {
+    try {
+        const resultado = await listarCosechasConSaldo();
+        res.json({ ok: true, data: resultado });
+    } catch (error: any) {
+        console.error("Error obteniendo cosechas con saldo:", error);
+        res.status(500).json({ ok: false, message: "Error obteniendo cosechas con saldo" });
+    }
+}
+
 export async function createCosecha(req: Request, res: Response) {
     try {
         const {
@@ -50,7 +61,8 @@ export async function createCosecha(req: Request, res: Response) {
             return;
         }
 
-        if (!tipoCosecha) {
+        const rawTipo = tipoCosecha || req.body.tipo_cosecha;
+        if (!rawTipo) {
             res.status(400).json({
                 ok: false,
                 message: "El campo 'tipoCosecha' es requerido",
@@ -58,7 +70,13 @@ export async function createCosecha(req: Request, res: Response) {
             return;
         }
 
-        if (!Array.isArray(loteIds) || loteIds.length === 0) {
+        const tieneLotes =
+            (Array.isArray(loteIds) && loteIds.length > 0) ||
+            Boolean(req.body.lotes) ||
+            (Array.isArray(req.body.loteFisicoIds) && req.body.loteFisicoIds.length > 0) ||
+            Boolean(req.body.trabajadorId);
+
+        if (!tieneLotes) {
             res.status(400).json({
                 ok: false,
                 message: "Debe seleccionar al menos un lote",

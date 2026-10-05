@@ -1,7 +1,12 @@
-// src/modules/trilla/trilla.dto.ts
+export type DescuentoLoteInput = {
+  loteId: number;
+  kilosDescontados: number;
+  sacos?: number | null;
+};
 
 export type CrearOrdenTrillaDTO = {
   loteIds: number[];
+  descuentosPorLote?: DescuentoLoteInput[];
   kilosEnviados: number;
   sacosEnviados?: number | null;
   fechaDespacho?: string | Date;

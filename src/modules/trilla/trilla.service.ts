@@ -13,24 +13,68 @@ function parseOptionalNumber(val: any, fieldName: string): number | null | undef
   return num;
 }
 
-export async function listarOrdenesTrilla() {
-  return prisma.ordenTrilla.findMany({
+const ordenTrillaIncludeDefault = {
+  lotes: true,
+  ordenLotes: {
     include: {
-      lotes: true,
+      lote: true,
     },
+  },
+};
+
+export function enriquecerOrdenTrilla(o: any) {
+  const baseKilos = Number(o.kilosNetos ?? o.kilosEnviados ?? 0);
+  const exp = Number(o.exportable ?? 0);
+  const rec = Number(o.recuperado ?? 0);
+
+  const pctExportable = baseKilos > 0 ? Number(((exp / baseKilos) * 100).toFixed(2)) : 0;
+  const pctRecuperado = baseKilos > 0 ? Number(((rec / baseKilos) * 100).toFixed(2)) : 0;
+
+  const otrosSubproductos =
+    Number(o.malla13 ?? 0) +
+    Number(o.segundaBuena ?? 0) +
+    Number(o.segundaMala ?? 0) +
+    Number(o.sucioEscojo ?? 0) +
+    Number(o.cisco ?? 0) +
+    Number(o.descarteMaquina ?? 0) +
+    Number(o.cascarilla ?? 0);
+
+  const restoKilos = otrosSubproductos > 0
+    ? otrosSubproductos
+    : Math.max(0, baseKilos - (exp + rec));
+
+  const pctResto = baseKilos > 0 ? Number(((restoKilos / baseKilos) * 100).toFixed(2)) : 0;
+
+  return {
+    ...o,
+    metricasRendimiento: {
+      baseKilos,
+      exportableKg: exp,
+      exportablePct: pctExportable,
+      recuperadoKg: rec,
+      recuperadoPct: pctRecuperado,
+      restoKg: Number(restoKilos.toFixed(2)),
+      restoPct: pctResto,
+    },
+  };
+}
+
+export async function listarOrdenesTrilla() {
+  const ordenes = await prisma.ordenTrilla.findMany({
+    include: ordenTrillaIncludeDefault,
     orderBy: {
       createdAt: "desc",
     },
   });
+  return ordenes.map(enriquecerOrdenTrilla);
 }
 
 export async function obtenerOrdenTrillaPorId(id: string) {
-  return prisma.ordenTrilla.findUnique({
+  const orden = await prisma.ordenTrilla.findUnique({
     where: { id },
-    include: {
-      lotes: true,
-    },
+    include: ordenTrillaIncludeDefault,
   });
+  return orden ? enriquecerOrdenTrilla(orden) : null;
 }
 
 export async function crearOrdenTrilla(data: CrearOrdenTrillaDTO) {
@@ -65,6 +109,9 @@ export async function crearOrdenTrilla(data: CrearOrdenTrillaDTO) {
     parseOptionalNumber(data.descarteMaquina, "descarteMaquina") ?? null;
   const cascarilla = parseOptionalNumber(data.cascarilla, "cascarilla") ?? null;
 
+  const tieneDescuentosManuales =
+    Array.isArray(data.descuentosPorLote) && data.descuentosPorLote.length > 0;
+
   return prisma.$transaction(async (tx) => {
     // 1. Obtener y validar lotes de origen
     const lotes = await tx.lote.findMany({
@@ -94,7 +141,7 @@ export async function crearOrdenTrilla(data: CrearOrdenTrillaDTO) {
       );
     }
 
-    // 2. Crear orden de trilla con los nuevos campos de subproductos y guía
+    // 2. Crear orden de trilla con subproductos y guía
     const orden = await tx.ordenTrilla.create({
       data: {
         codigoTrilla,
@@ -115,32 +162,82 @@ export async function crearOrdenTrilla(data: CrearOrdenTrillaDTO) {
           connect: loteIds.map((id) => ({ id })),
         },
       },
-      include: {
-        lotes: true,
-      },
+      include: ordenTrillaIncludeDefault,
     });
 
-    // 3. Descontar kilos y actualizar estado de los lotes (Lógica de saldos parciales)
-    let restantePorDescontar = kilosEnviados;
-    for (const lote of lotes) {
-      const disponible = Number(lote.kilosActuales ?? lote.kilosIniciales ?? 0);
-      const aDescontar = Math.min(disponible, restantePorDescontar);
-      const nuevoSaldo = Math.max(0, disponible - aDescontar);
-      // Si el saldo llega a cero se cierra; de lo contrario se mantiene en proceso
-      const nuevoEstado = nuevoSaldo === 0 ? "CERRADO" : "EN_PROCESO";
+    // 3. Descontar kilos: Manual vs Automático
+    if (tieneDescuentosManuales) {
+      // DESCUENTO MANUAL: usar exactamente lo que el usuario especificó por lote
+      for (const desc of data.descuentosPorLote!) {
+        const lote = lotes.find((l) => l.id === Number(desc.loteId));
+        if (!lote) continue;
 
-      await tx.lote.update({
-        where: { id: lote.id },
-        data: {
-          kilosActuales: nuevoSaldo,
-          estado: nuevoEstado,
-        },
-      });
+        const disponible = Number(lote.kilosActuales ?? lote.kilosIniciales ?? 0);
+        const aDescontar = Number(desc.kilosDescontados);
 
-      restantePorDescontar -= aDescontar;
+        if (aDescontar > disponible) {
+          throw new Error(
+            `El descuento manual para el lote ${lote.codigo} (${aDescontar} kg) supera su saldo disponible (${disponible} kg)`
+          );
+        }
+
+        const nuevoSaldo = Math.max(0, Number((disponible - aDescontar).toFixed(2)));
+        const nuevoEstado = nuevoSaldo === 0 ? "CERRADO" : "EN_PROCESO";
+
+        await tx.lote.update({
+          where: { id: lote.id },
+          data: {
+            kilosActuales: nuevoSaldo,
+            estado: nuevoEstado,
+          },
+        });
+
+        await tx.ordenTrillaLote.create({
+          data: {
+            ordenTrillaId: orden.id,
+            loteId: lote.id,
+            kilosDescontados: aDescontar,
+            sacos: desc.sacos != null ? Number(desc.sacos) : null,
+          },
+        });
+      }
+    } else {
+      // DESCUENTO AUTOMÁTICO (greedy): fallback secuencial si no viene desglose manual
+      let restantePorDescontar = kilosEnviados;
+      for (const lote of lotes) {
+        const disponible = Number(lote.kilosActuales ?? lote.kilosIniciales ?? 0);
+        const aDescontar = Math.min(disponible, restantePorDescontar);
+        const nuevoSaldo = Math.max(0, Number((disponible - aDescontar).toFixed(2)));
+        const nuevoEstado = nuevoSaldo === 0 ? "CERRADO" : "EN_PROCESO";
+
+        await tx.lote.update({
+          where: { id: lote.id },
+          data: {
+            kilosActuales: nuevoSaldo,
+            estado: nuevoEstado,
+          },
+        });
+
+        if (aDescontar > 0) {
+          await tx.ordenTrillaLote.create({
+            data: {
+              ordenTrillaId: orden.id,
+              loteId: lote.id,
+              kilosDescontados: aDescontar,
+            },
+          });
+        }
+
+        restantePorDescontar -= aDescontar;
+      }
     }
 
-    return orden;
+    const ordenCompleta = await tx.ordenTrilla.findUnique({
+      where: { id: orden.id },
+      include: ordenTrillaIncludeDefault,
+    });
+
+    return enriquecerOrdenTrilla(ordenCompleta);
   });
 }
 
@@ -220,13 +317,13 @@ export async function actualizarOrdenTrilla(id: string, data: ActualizarOrdenTri
     };
   }
 
-  return prisma.ordenTrilla.update({
+  const actualizada = await prisma.ordenTrilla.update({
     where: { id },
     data: updateData,
-    include: {
-      lotes: true,
-    },
+    include: ordenTrillaIncludeDefault,
   });
+
+  return enriquecerOrdenTrilla(actualizada);
 }
 
 export async function eliminarOrdenTrilla(id: string) {

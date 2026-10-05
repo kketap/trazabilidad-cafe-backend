@@ -191,18 +191,7 @@ export async function crearProceso(data: ProcesoInput) {
             );
         }
 
-        if (!cosechaIdFinal) {
-            const fechaProcesoKey = getFechaKey(fecha);
-
-            const cosechaRelacionada = lote.cosechaLotes.find(
-                (relacion) =>
-                    getFechaKey(relacion.cosecha.fecha) === fechaProcesoKey,
-            );
-
-            if (cosechaRelacionada) {
-                cosechaIdFinal = cosechaRelacionada.cosechaId;
-            }
-        }
+        // cosechaId es completamente opcional: el proceso trazabilidad se vincula directamente al Lote de Proceso.
     }
 
     return prisma.$transaction(async (tx) => {
@@ -248,6 +237,10 @@ export async function crearProceso(data: ProcesoInput) {
                 etapa: data.etapa?.trim() || null,
                 tipoProceso,
                 kilosIngresados,
+                kilosResultantes:
+                    data.kilosResultantes !== undefined && data.kilosResultantes !== null
+                        ? Number(data.kilosResultantes)
+                        : null,
                 loteId: loteIdFinal,
                 cosechaId: cosechaIdFinal,
                 gradosBrix:
@@ -361,6 +354,12 @@ export async function actualizarProceso(
             }),
             ...(kilosIngresados !== undefined && {
                 kilosIngresados,
+            }),
+            ...(data.kilosResultantes !== undefined && {
+                kilosResultantes:
+                    data.kilosResultantes !== null
+                        ? Number(data.kilosResultantes)
+                        : null,
             }),
             ...(data.codigo !== undefined && {
                 codigo: data.codigo.trim(),

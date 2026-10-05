@@ -5,6 +5,7 @@ import {
   createCosecha,
   deleteCosecha,
   getCosechas,
+  getCosechasConSaldo,
   getCosechasResumen,
   getCosechasReporte,
   updateCosecha,
@@ -24,6 +25,7 @@ const upload = multer({
 });
 
 router.get("/", getCosechas);
+router.get("/con-saldo", getCosechasConSaldo);
 router.get("/resumen", getCosechasResumen);
 router.get("/reporte", getCosechasReporte);
 router.post("/", createCosecha);

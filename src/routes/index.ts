@@ -11,6 +11,7 @@ import secadoRoutes from "../modules/secado/secado.routes";
 import empaqueRoutes from "../modules/empaque/empaque.routes";
 import trillaRoutes from "../modules/trilla/trilla.routes";
 import ventasRoutes from "../modules/ventas/ventas.routes";
+import fundosRoutes from "../modules/fundos/fundos.routes";
 import { verifyToken } from "../middlewares/verifyToken";
 
 const router = Router();
@@ -36,5 +37,6 @@ router.use("/secado", secadoRoutes);
 router.use("/empaque", empaqueRoutes);
 router.use("/trilla", trillaRoutes);
 router.use("/ventas", ventasRoutes);
+router.use("/fundos", fundosRoutes);
 
 export default router;
