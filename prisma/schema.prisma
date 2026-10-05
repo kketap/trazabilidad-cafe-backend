@@ -17,9 +17,50 @@ model Cosecha {
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
   varietal          String?
+  observacion       String?
   cosechaLotes      CosechaLote[]
   CosechaTrabajador CosechaTrabajador[]
   procesos          ProcesoTrazabilidad[]
+  lotesFisicos      CosechaLoteFisico[]
+}
+
+// ── Catálogo de lotes físicos (cuarteles dentro de un fundo) ──
+// Ej: FSC-1..45, FSS-1..36, FDS-1..7. Editable desde la app.
+model Fundo {
+  id           Int          @id @default(autoincrement())
+  codigo       String       @unique // FSC, FSS, FDS
+  nombre       String?
+  activo       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  lotesFisicos LoteFisico[]
+}
+
+model LoteFisico {
+  id        Int                 @id @default(autoincrement())
+  codigo    String              @unique // FSC-1
+  numero    Int
+  fundoId   Int
+  hectareas Float?
+  activo    Boolean             @default(true)
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  fundo     Fundo               @relation(fields: [fundoId], references: [id])
+  cosechas  CosechaLoteFisico[]
+
+  @@unique([fundoId, numero])
+}
+
+// Lotes físicos de origen de una cosecha
+model CosechaLoteFisico {
+  id           Int        @id @default(autoincrement())
+  cosechaId    Int
+  loteFisicoId Int
+  createdAt    DateTime   @default(now())
+  cosecha      Cosecha    @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
+  loteFisico   LoteFisico @relation(fields: [loteFisicoId], references: [id])
+
+  @@unique([cosechaId, loteFisicoId])
 }
 
 model Lote {
@@ -44,27 +85,45 @@ model Lote {
   ordenTrilla         OrdenTrilla?          @relation(fields: [ordenTrillaId], references: [id])
   ProcesoTrazabilidad ProcesoTrazabilidad[]
   secados             Secado[]
+  secadoLotes         SecadoLote[]
+  ordenTrillaLotes    OrdenTrillaLote[]
 }
 
 model CosechaLote {
-  id        Int      @id @default(autoincrement())
-  cosechaId Int
-  loteId    Int
-  createdAt DateTime @default(now())
-  cosecha   Cosecha  @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
-  lote      Lote     @relation(fields: [loteId], references: [id])
+  id          Int      @id @default(autoincrement())
+  cosechaId   Int
+  loteId      Int
+  // Kilos parciales tomados de esta cosecha para el lote de proceso
+  kilosUsados Float    @default(0)
+  createdAt   DateTime @default(now())
+  cosecha     Cosecha  @relation(fields: [cosechaId], references: [id], onDelete: Cascade)
+  lote        Lote     @relation(fields: [loteId], references: [id])
 
   @@unique([cosechaId, loteId])
 }
 
 model Usuario {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  nombre    String
-  rol       String   @default("ADMIN")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int            @id @default(autoincrement())
+  email        String         @unique
+  password     String
+  nombre       String
+  rol          String         @default("ADMIN")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  RefreshToken RefreshToken[]
+}
+
+model RefreshToken {
+  id        String    @id
+  tokenHash String    @unique
+  usuarioId Int
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  Usuario   Usuario   @relation(fields: [usuarioId], references: [id])
+
+  @@index([expiresAt])
+  @@index([usuarioId])
 }
 
 model ProcesoTrazabilidad {
@@ -72,6 +131,7 @@ model ProcesoTrazabilidad {
   fecha              DateTime
   etapa              String?
   kilosIngresados    Float
+  kilosResultantes   Float?
   cosechaId          Int?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
@@ -134,8 +194,8 @@ model CosechaTrabajador {
 }
 
 model Secado {
-  id               Int           @id @default(autoincrement())
-  codigo           String?       @unique
+  id               Int             @id @default(autoincrement())
+  codigo           String?         @unique
   loteId           Int
   fechaInicio      DateTime
   fechaFin         DateTime?
@@ -143,18 +203,34 @@ model Secado {
   kilosResultantes Float
   merma            Float
   observaciones    String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
   perfilProceso    PerfilSecado?
   secadora         String?
   tempMinima       Float?
   tempMaxima       Float?
-  lote             Lote          @relation(fields: [loteId], references: [id])
+  lote             Lote            @relation(fields: [loteId], references: [id])
   empaques         Empaque[]
+  secadoLotes      SecadoLote[]
+  empaqueSecados   EmpaqueSecado[]
+}
+
+// Lotes húmedos que alimentan un proceso de secado (con kilos parciales)
+model SecadoLote {
+  id          Int      @id @default(autoincrement())
+  secadoId    Int
+  loteId      Int
+  kilosUsados Float
+  createdAt   DateTime @default(now())
+  secado      Secado   @relation(fields: [secadoId], references: [id], onDelete: Cascade)
+  lote        Lote     @relation(fields: [loteId], references: [id])
+
+  @@unique([secadoId, loteId])
 }
 
 model Empaque {
-  id               Int       @id @default(autoincrement())
+  id               Int             @id @default(autoincrement())
+  codigo           String?         @unique
   loteId           Int
   secadoId         Int?
   tipoEmpaque      String?
@@ -166,20 +242,34 @@ model Empaque {
   kilosResultantes Float
   merma            Float
   observaciones    String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
   humedad          Float?
   actividadAgua    Float?
   puntajeSca       Float?
   perfilSensorial  String?
   fueCatado        Boolean?
-  lote             Lote      @relation(fields: [loteId], references: [id])
-  secado           Secado?   @relation(fields: [secadoId], references: [id])
+  lote             Lote            @relation(fields: [loteId], references: [id])
+  secado           Secado?         @relation(fields: [secadoId], references: [id])
+  empaqueSecados   EmpaqueSecado[]
+}
+
+// Códigos de secado agrupados en una entrada de Almacén Pergamino
+model EmpaqueSecado {
+  id          Int      @id @default(autoincrement())
+  empaqueId   Int
+  secadoId    Int
+  kilosUsados Float?
+  createdAt   DateTime @default(now())
+  empaque     Empaque  @relation(fields: [empaqueId], references: [id], onDelete: Cascade)
+  secado      Secado   @relation(fields: [secadoId], references: [id])
+
+  @@unique([empaqueId, secadoId])
 }
 
 model OrdenTrilla {
-  id              String    @id @default(uuid())
-  codigoTrilla    String    @unique
+  id              String            @id @default(uuid())
+  codigoTrilla    String            @unique
   numeroGuia      String?
   fechaDespacho   DateTime
   fechaIngreso    DateTime?
@@ -197,10 +287,25 @@ model OrdenTrilla {
   cisco           Float?
   descarteMaquina Float?
   cascarilla      Float?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
   lotes           Lote[]
   ventas          Venta[]
+  ordenLotes      OrdenTrillaLote[]
+}
+
+// Descuento manual de kilos por lote en una orden de trilla
+model OrdenTrillaLote {
+  id               Int         @id @default(autoincrement())
+  ordenTrillaId    String
+  loteId           Int
+  kilosDescontados Float
+  sacos            Int?
+  createdAt        DateTime    @default(now())
+  ordenTrilla      OrdenTrilla @relation(fields: [ordenTrillaId], references: [id], onDelete: Cascade)
+  lote             Lote        @relation(fields: [loteId], references: [id])
+
+  @@unique([ordenTrillaId, loteId])
 }
 
 model Venta {
