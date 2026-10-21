@@ -34,7 +34,6 @@ export type CosechaInput = {
     kilos_mensuales?: number;
 
     varietal?: string | string[] | null;
-    observacion?: string | null;
 };
 
 type ResumenFiltros = {
