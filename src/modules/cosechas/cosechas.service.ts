@@ -13,10 +13,13 @@ export type CosechaInput = {
 
     lotes?: string;
     loteIds?: number[];
+    loteFisicoIds?: number[];
 
     totalHectareas: number;
 
     tipoCosecha?: string;
+    observacion?: string | null;
+    observaciones?: string | null;
 
     // Compatibilidad con versión antigua de un solo trabajador
     trabajadorId?: number;
@@ -38,6 +41,46 @@ type ResumenFiltros = {
     desde?: Date;
     hasta?: Date;
 };
+
+const cosechaIncludeDefault = {
+    CosechaTrabajador: {
+        include: {
+            Trabajador: true,
+        },
+    },
+    cosechaLotes: {
+        include: {
+            lote: true,
+        },
+    },
+    lotesFisicos: {
+        include: {
+            loteFisico: {
+                include: {
+                    fundo: true,
+                },
+            },
+        },
+    },
+    procesos: true,
+};
+
+export function enriquecerCosechaConSaldo(c: any) {
+    const kilosUsados = (c.cosechaLotes || []).reduce(
+        (acc: number, cl: any) => acc + Number(cl.kilosUsados || 0),
+        0
+    );
+    const saldoKilos = Math.max(
+        0,
+        Number((Number(c.kilosCosechados || 0) - kilosUsados).toFixed(2))
+    );
+    return {
+        ...c,
+        kilosUsados,
+        saldoKilos,
+        tieneSaldo: saldoKilos > 0,
+    };
+}
 
 export function normalizeTipoCosecha(val?: string): string {
     if (!val) return "plena";
@@ -115,50 +158,38 @@ function normalizeCosechaResponse<T extends Record<string, any>>(
 
 export async function listarCosechas() {
     const cosechas = await prisma.cosecha.findMany({
-        include: {
-            CosechaTrabajador: {
-                include: {
-                    Trabajador: true,
-                },
-            },
-            cosechaLotes: {
-                include: {
-                    lote: true,
-                },
-            },
-            procesos: true,
-        },
+        include: cosechaIncludeDefault,
         orderBy: {
             fecha: "desc",
         },
     });
+    return cosechas.map(enriquecerCosechaConSaldo);
+}
 
-    return cosechas.map((cosecha) =>
-        normalizeCosechaResponse(cosecha),
-    );
+export async function listarCosechasConSaldo() {
+    const cosechas = await listarCosechas();
+    const cosechasConSaldo = cosechas.filter((c) => c.saldoKilos > 0);
+    const totalKilosSaldo = cosechasConSaldo.reduce((acc, c) => acc + c.saldoKilos, 0);
+
+    return {
+        totalCosechas: cosechasConSaldo.length,
+        totalKilosSaldo: Number(totalKilosSaldo.toFixed(2)),
+        tienePendientes: cosechasConSaldo.length > 0,
+        cosechas: cosechasConSaldo,
+    };
 }
 
 export async function obtenerCosechaPorId(id: number) {
-    return prisma.cosecha.findUnique({
+    const cosecha = await prisma.cosecha.findUnique({
         where: { id },
-        include: {
-            CosechaTrabajador: {
-                include: {
-                    Trabajador: true,
-                },
-            },
-            cosechaLotes: {
-                include: {
-                    lote: true,
-                },
-            },
-            procesos: true,
-        },
+        include: cosechaIncludeDefault,
     });
+    return cosecha ? enriquecerCosechaConSaldo(cosecha) : null;
 }
 
 export async function crearCosecha(data: CosechaInput) {
     const loteIds = data.loteIds ?? [];
+    const loteFisicoIds = data.loteFisicoIds ?? [];
     const trabajadores = buildTrabajadoresInput(data);
 
     const lotesTexto =
@@ -169,8 +200,9 @@ export async function crearCosecha(data: CosechaInput) {
 
     const rawTipo = data.tipo_cosecha || data.tipoCosecha;
     const tipoCosechaFinal = normalizeTipoCosecha(rawTipo);
+    const observacionFinal = data.observacion?.trim() || data.observaciones?.trim() || null;
 
-    const cosecha = await prisma.cosecha.create({
+    const creada = await prisma.cosecha.create({
         data: {
             fecha: new Date(data.fecha),
             kilosCosechados: Number(data.kilosCosechados),
@@ -178,7 +210,7 @@ export async function crearCosecha(data: CosechaInput) {
             totalHectareas: Number(data.totalHectareas),
             tipoCosecha: tipoCosechaFinal,
             varietal: normalizeVarietal(data.varietal),
-            observacion: data.observacion?.trim() || null,
+            observacion: observacionFinal,
 
             cosechaLotes:
                 loteIds.length > 0
@@ -187,6 +219,19 @@ export async function crearCosecha(data: CosechaInput) {
                             lote: {
                                 connect: {
                                     id: Number(loteId),
+                                },
+                            },
+                        })),
+                    }
+                    : undefined,
+
+            lotesFisicos:
+                loteFisicoIds.length > 0
+                    ? {
+                        create: loteFisicoIds.map((loteFisicoId) => ({
+                            loteFisico: {
+                                connect: {
+                                    id: Number(loteFisicoId),
                                 },
                             },
                         })),
@@ -213,22 +258,10 @@ export async function crearCosecha(data: CosechaInput) {
                     }
                     : undefined,
         },
-        include: {
-            CosechaTrabajador: {
-                include: {
-                    Trabajador: true,
-                },
-            },
-            cosechaLotes: {
-                include: {
-                    lote: true,
-                },
-            },
-            procesos: true,
-        },
+        include: cosechaIncludeDefault,
     });
 
-    return normalizeCosechaResponse(cosecha);
+    return enriquecerCosechaConSaldo(creada);
 }
 
 export async function actualizarCosecha(
@@ -236,11 +269,18 @@ export async function actualizarCosecha(
     data: Partial<CosechaInput>,
 ) {
     const loteIds = data.loteIds;
+    const loteFisicoIds = data.loteFisicoIds;
     const trabajadores = data.trabajadores;
 
     const rawTipo = data.tipo_cosecha || data.tipoCosecha;
     const tipoCosechaFinal =
         rawTipo !== undefined ? normalizeTipoCosecha(rawTipo) : undefined;
+    const observacionFinal =
+        data.observacion !== undefined
+            ? (data.observacion?.trim() || null)
+            : data.observaciones !== undefined
+                ? (data.observaciones?.trim() || null)
+                : undefined;
 
     return prisma.$transaction(async (tx) => {
         await tx.cosecha.update({
@@ -264,8 +304,8 @@ export async function actualizarCosecha(
                 ...(data.varietal !== undefined && {
                     varietal: normalizeVarietal(data.varietal),
                 }),
-                ...(data.observacion !== undefined && {
-                    observacion: data.observacion?.trim() || null,
+                ...(observacionFinal !== undefined && {
+                    observacion: observacionFinal,
                 }),
             },
         });
@@ -282,6 +322,24 @@ export async function actualizarCosecha(
                     data: loteIds.map((loteId) => ({
                         cosechaId: id,
                         loteId: Number(loteId),
+                    })),
+                    skipDuplicates: true,
+                });
+            }
+        }
+
+        if (loteFisicoIds !== undefined) {
+            await tx.cosechaLoteFisico.deleteMany({
+                where: {
+                    cosechaId: id,
+                },
+            });
+
+            if (loteFisicoIds.length > 0) {
+                await tx.cosechaLoteFisico.createMany({
+                    data: loteFisicoIds.map((loteFisicoId) => ({
+                        cosechaId: id,
+                        loteFisicoId: Number(loteFisicoId),
                     })),
                     skipDuplicates: true,
                 });
@@ -332,26 +390,12 @@ export async function actualizarCosecha(
             });
         }
 
-        const cosechaActualizada = await tx.cosecha.findUnique({
-            where: {
-                id,
-            },
-            include: {
-                CosechaTrabajador: {
-                    include: {
-                        Trabajador: true,
-                    },
-                },
-                cosechaLotes: {
-                    include: {
-                        lote: true,
-                    },
-                },
-                procesos: true,
-            },
+        const actualizada = await tx.cosecha.findUnique({
+            where: { id },
+            include: cosechaIncludeDefault,
         });
 
-        return normalizeCosechaResponse(cosechaActualizada);
+        return actualizada ? enriquecerCosechaConSaldo(actualizada) : null;
     });
 }
 

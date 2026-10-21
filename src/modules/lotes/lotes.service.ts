@@ -2,6 +2,11 @@
 import { prisma } from "../../config/prisma";
 import type { EstadoLote, TipoCodigoLote } from "@prisma/client";
 
+export type LoteCosechaItem = {
+    cosechaId: number;
+    kilosUsados: number;
+};
+
 export type LoteInput = {
     codigo?: string;
     nombre?: string | null;
@@ -15,10 +20,23 @@ export type LoteInput = {
     observacion?: string | null;
     gradosBrix?: number | null;
     activo?: boolean;
+    cosechas?: LoteCosechaItem[];
 };
 
 export async function listarLotes() {
     return prisma.lote.findMany({
+        include: {
+            cosechaLotes: {
+                include: {
+                    cosecha: true,
+                },
+            },
+            secadoLotes: {
+                include: {
+                    secado: true,
+                },
+            },
+        },
         orderBy: {
             id: "desc",
         },
@@ -32,6 +50,11 @@ export async function obtenerLotePorId(id: number) {
             cosechaLotes: {
                 include: {
                     cosecha: true,
+                },
+            },
+            secadoLotes: {
+                include: {
+                    secado: true,
                 },
             },
         },
@@ -139,38 +162,105 @@ export async function crearLote(data: LoteInput) {
         data.codigo?.trim() ||
         (await generarCodigoPrincipalLote(tipoCodigo));
 
-    const kilosIniciales =
-        data.kilosIniciales !== undefined && data.kilosIniciales !== null
-            ? Number(data.kilosIniciales)
-            : null;
+    const cosechasInput = Array.isArray(data.cosechas)
+        ? data.cosechas.filter((c) => Number(c.cosechaId) > 0 && Number(c.kilosUsados) > 0)
+        : [];
 
-    return prisma.lote.create({
-        data: {
-            codigo,
-            nombre: data.nombre?.trim() || null,
-            tipoCodigo,
-            estado: data.estado ?? "EN_PROCESO",
-            kilosIniciales,
-            kilosActuales:
-                data.kilosActuales !== undefined && data.kilosActuales !== null
-                    ? Number(data.kilosActuales)
-                    : kilosIniciales,
-            saldoTemporal:
-                data.saldoTemporal !== undefined && data.saldoTemporal !== null
-                    ? Number(data.saldoTemporal)
-                    : null,
-            hectareas:
-                data.hectareas !== undefined && data.hectareas !== null
-                    ? Number(data.hectareas)
-                    : null,
-            ubicacion: data.ubicacion?.trim() || null,
-            observacion: data.observacion?.trim() || null,
-            gradosBrix:
-                data.gradosBrix !== undefined && data.gradosBrix !== null
-                    ? Number(data.gradosBrix)
-                    : null,
-            activo: data.activo ?? true,
-        },
+    return prisma.$transaction(async (tx) => {
+        let sumaKilosCosechas = 0;
+
+        if (cosechasInput.length > 0) {
+            for (const item of cosechasInput) {
+                const cosecha = await tx.cosecha.findUnique({
+                    where: { id: Number(item.cosechaId) },
+                    include: { cosechaLotes: true },
+                });
+
+                if (!cosecha) {
+                    throw new Error(`La cosecha ID ${item.cosechaId} no existe`);
+                }
+
+                const kilosYaUsados = cosecha.cosechaLotes.reduce(
+                    (acc, cl) => acc + Number(cl.kilosUsados || 0),
+                    0
+                );
+                const saldoDisponible = Math.max(
+                    0,
+                    Number((cosecha.kilosCosechados - kilosYaUsados).toFixed(2))
+                );
+
+                const kilosAUsar = Number(item.kilosUsados);
+                if (kilosAUsar > saldoDisponible) {
+                    throw new Error(
+                        `La cosecha COS-${String(cosecha.id).padStart(3, "0")} solo tiene ${saldoDisponible} kg disponibles, se intentó usar ${kilosAUsar} kg`
+                    );
+                }
+
+                sumaKilosCosechas += kilosAUsar;
+            }
+        }
+
+        const kilosIniciales =
+            data.kilosIniciales !== undefined && data.kilosIniciales !== null
+                ? Number(data.kilosIniciales)
+                : cosechasInput.length > 0
+                    ? Number(sumaKilosCosechas.toFixed(2))
+                    : null;
+
+        const kilosActuales =
+            data.kilosActuales !== undefined && data.kilosActuales !== null
+                ? Number(data.kilosActuales)
+                : kilosIniciales;
+
+        const loteCreado = await tx.lote.create({
+            data: {
+                codigo,
+                nombre: data.nombre?.trim() || null,
+                tipoCodigo,
+                estado: data.estado ?? "EN_PROCESO",
+                kilosIniciales,
+                kilosActuales,
+                saldoTemporal:
+                    data.saldoTemporal !== undefined && data.saldoTemporal !== null
+                        ? Number(data.saldoTemporal)
+                        : null,
+                hectareas:
+                    data.hectareas !== undefined && data.hectareas !== null
+                        ? Number(data.hectareas)
+                        : null,
+                ubicacion: data.ubicacion?.trim() || null,
+                observacion: data.observacion?.trim() || null,
+                gradosBrix:
+                    data.gradosBrix !== undefined && data.gradosBrix !== null
+                        ? Number(data.gradosBrix)
+                        : null,
+                activo: data.activo ?? true,
+
+                cosechaLotes:
+                    cosechasInput.length > 0
+                        ? {
+                            create: cosechasInput.map((c) => ({
+                                cosecha: { connect: { id: Number(c.cosechaId) } },
+                                kilosUsados: Number(c.kilosUsados),
+                            })),
+                        }
+                        : undefined,
+            },
+            include: {
+                cosechaLotes: {
+                    include: {
+                        cosecha: true,
+                    },
+                },
+                secadoLotes: {
+                    include: {
+                        secado: true,
+                    },
+                },
+            },
+        });
+
+        return loteCreado;
     });
 }
 

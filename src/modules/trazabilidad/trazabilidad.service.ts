@@ -533,36 +533,7 @@ export async function crearProceso(
             );
         }
 
-        /*
-         * Si no se envía cosechaId, intenta encontrar una cosecha del lote
-         * cuya fecha coincida con la fecha registrada para el proceso.
-         */
-        if (
-            cosechaIdFinal ===
-            null
-        ) {
-            const fechaProcesoKey =
-                getFechaKey(
-                    fecha,
-                );
-
-            const cosechaRelacionada =
-                lote.cosechaLotes.find(
-                    (relacion) =>
-                        getFechaKey(
-                            relacion.cosecha
-                                .fecha,
-                        ) ===
-                        fechaProcesoKey,
-                );
-
-            if (
-                cosechaRelacionada
-            ) {
-                cosechaIdFinal =
-                    cosechaRelacionada.cosechaId;
-            }
-        }
+        // cosechaId es completamente opcional: el proceso trazabilidad se vincula directamente al Lote de Proceso.
     }
 
     return prisma.$transaction(
@@ -628,112 +599,57 @@ export async function crearProceso(
                 }
             }
 
-            return tx.procesoTrazabilidad.create({
-                data: {
-                    codigo,
-
-                    fecha,
-
-                    fechaInicio,
-                    fechaFin,
-
-                    /*
-                     * Siempre se guarda la duración validada/calculada
-                     * por el backend.
-                     */
-                    duracionHoras,
-
-                    etapa:
-                        data.etapa?.trim() ||
-                        null,
-
-                    tipoProceso,
-
-                    kilosIngresados,
-                    kilosResultantes,
-
-                    loteId:
-                        loteIdFinal,
-
-                    cosechaId:
-                        cosechaIdFinal,
-
-                    gradosBrix:
-                        data.gradosBrix !==
-                            undefined &&
-                            data.gradosBrix !==
-                            null
-                            ? Number(
-                                data.gradosBrix,
-                            )
-                            : null,
-
-                    nivelPh:
-                        data.nivelPh !==
-                            undefined &&
-                            data.nivelPh !==
-                            null
-                            ? Number(
-                                data.nivelPh,
-                            )
-                            : null,
-
-                    tempMaxima:
-                        data.tempMaxima !==
-                            undefined &&
-                            data.tempMaxima !==
-                            null
-                            ? Number(
-                                data.tempMaxima,
-                            )
-                            : null,
-
-                    tempMinima:
-                        data.tempMinima !==
-                            undefined &&
-                            data.tempMinima !==
-                            null
-                            ? Number(
-                                data.tempMinima,
-                            )
-                            : null,
-
-                    tanqueFermentacion:
-                        data.tanqueFermentacion?.trim() ||
-                        null,
-
-                    /*
-                     * Utilizamos las fechas ya parseadas y validadas.
-                     */
-                    inicioFermentacion,
-                    finFermentacion,
-
-                    fueDespulpado:
-                        data.fueDespulpado !==
-                            undefined &&
-                            data.fueDespulpado !==
-                            null
-                            ? Boolean(
-                                data.fueDespulpado,
-                            )
-                            : null,
-
-                    fueLavado:
-                        data.fueLavado !==
-                            undefined &&
-                            data.fueLavado !==
-                            null
-                            ? Boolean(
-                                data.fueLavado,
-                            )
-                            : null,
-                },
-
-                include:
-                    procesoInclude,
-            });
-        },
-    );
+        return tx.procesoTrazabilidad.create({
+            data: {
+                codigo,
+                fecha,
+                fechaInicio,
+                fechaFin,
+                duracionHoras,
+                etapa: data.etapa?.trim() || null,
+                tipoProceso,
+                kilosIngresados,
+                kilosResultantes:
+                    data.kilosResultantes !== undefined && data.kilosResultantes !== null
+                        ? Number(data.kilosResultantes)
+                        : null,
+                loteId: loteIdFinal,
+                cosechaId: cosechaIdFinal,
+                gradosBrix:
+                    data.gradosBrix !== undefined && data.gradosBrix !== null
+                        ? Number(data.gradosBrix)
+                        : null,
+                nivelPh:
+                    data.nivelPh !== undefined && data.nivelPh !== null
+                        ? Number(data.nivelPh)
+                        : null,
+                tempMaxima:
+                    data.tempMaxima !== undefined && data.tempMaxima !== null
+                        ? Number(data.tempMaxima)
+                        : null,
+                tempMinima:
+                    data.tempMinima !== undefined && data.tempMinima !== null
+                        ? Number(data.tempMinima)
+                        : null,
+                tanqueFermentacion: data.tanqueFermentacion?.trim() || null,
+                inicioFermentacion: data.inicioFermentacion
+                    ? new Date(data.inicioFermentacion)
+                    : null,
+                finFermentacion: data.finFermentacion
+                    ? new Date(data.finFermentacion)
+                    : null,
+                fueDespulpado:
+                    data.fueDespulpado !== undefined && data.fueDespulpado !== null
+                        ? Boolean(data.fueDespulpado)
+                        : null,
+                fueLavado:
+                    data.fueLavado !== undefined && data.fueLavado !== null
+                        ? Boolean(data.fueLavado)
+                        : null,
+            },
+            include: procesoInclude,
+        });
+    });
 }
 
 export async function actualizarProceso(
@@ -1095,19 +1011,14 @@ export async function actualizarProceso(
                 kilosIngresados:
                     kilosIngresadosFinal,
             }),
-
-            ...(data.kilosResultantes !==
-                undefined && {
+            ...(data.kilosResultantes !== undefined && {
                 kilosResultantes:
-                    Number(
-                        data.kilosResultantes,
-                    ),
+                    data.kilosResultantes !== null
+                        ? Number(data.kilosResultantes)
+                        : null,
             }),
-
-            ...(data.codigo !==
-                undefined && {
-                codigo:
-                    data.codigo.trim(),
+            ...(data.codigo !== undefined && {
+                codigo: data.codigo.trim(),
             }),
 
             /*
