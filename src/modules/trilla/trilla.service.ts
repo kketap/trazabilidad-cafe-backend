@@ -326,8 +326,49 @@ export async function actualizarOrdenTrilla(id: string, data: ActualizarOrdenTri
   return enriquecerOrdenTrilla(actualizada);
 }
 
-export async function eliminarOrdenTrilla(id: string) {
+export async function eliminarOrdenTrilla(
+  id: string,
+) {
+  const orden =
+    await prisma.ordenTrilla.findUnique({
+      where: {
+        id,
+      },
+
+      select: {
+        id: true,
+      },
+    });
+
+  if (!orden) {
+    throw new Error(
+      "Orden de trilla no encontrada",
+    );
+  }
+
+  const ventasAsociadas =
+    await prisma.venta.count({
+      where: {
+        ordenTrillaId:
+          id,
+      },
+    });
+
+  if (ventasAsociadas > 0) {
+    throw new Error(
+      `No se puede eliminar esta orden de trilla porque tiene ${ventasAsociadas} venta${ventasAsociadas === 1
+        ? ""
+        : "s"
+      } asociada${ventasAsociadas === 1
+        ? ""
+        : "s"
+      }.`,
+    );
+  }
+
   return prisma.ordenTrilla.delete({
-    where: { id },
+    where: {
+      id,
+    },
   });
 }

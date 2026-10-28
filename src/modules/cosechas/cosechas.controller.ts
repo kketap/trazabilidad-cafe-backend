@@ -50,6 +50,7 @@ export async function createCosecha(req: Request, res: Response) {
             totalHectareas,
             tipoCosecha,
             loteIds,
+            loteFisicoIds,
             lotes,
             trabajadores,
             varietal,
@@ -99,20 +100,6 @@ export async function createCosecha(req: Request, res: Response) {
             return;
         }
 
-        const tieneLotes =
-            (Array.isArray(loteIds) && loteIds.length > 0) ||
-            Boolean(req.body.lotes) ||
-            (Array.isArray(req.body.loteFisicoIds) && req.body.loteFisicoIds.length > 0) ||
-            Boolean(req.body.trabajadorId);
-
-        if (!tieneLotes) {
-            res.status(400).json({
-                ok: false,
-                message: "Debe seleccionar al menos un lote",
-            });
-            return;
-        }
-
         if (
             trabajadores !== undefined &&
             !Array.isArray(trabajadores)
@@ -131,7 +118,21 @@ export async function createCosecha(req: Request, res: Response) {
             totalHectareas: Number(totalHectareas),
             tipoCosecha: String(tipoCosecha),
 
-            loteIds: loteIds.map((id: unknown) => Number(id)),
+            loteIds:
+                Array.isArray(loteIds)
+                    ? loteIds.map(
+                        (id: unknown) =>
+                            Number(id),
+                    )
+                    : [],
+
+            loteFisicoIds:
+                Array.isArray(loteFisicoIds)
+                    ? loteFisicoIds.map(
+                        (id: unknown) =>
+                            Number(id),
+                    )
+                    : [],
             lotes:
                 lotes !== undefined
                     ? String(lotes)
@@ -222,14 +223,29 @@ export async function updateCosecha(
 
         if (
             req.body.loteIds !== undefined &&
-            (
-                !Array.isArray(req.body.loteIds) ||
-                req.body.loteIds.length === 0
+            !Array.isArray(
+                req.body.loteIds,
             )
         ) {
             res.status(400).json({
                 ok: false,
-                message: "Debe seleccionar al menos un lote",
+                message:
+                    "El campo 'loteIds' debe ser una lista",
+            });
+            return;
+        }
+
+        if (
+            req.body.loteFisicoIds !==
+            undefined &&
+            !Array.isArray(
+                req.body.loteFisicoIds,
+            )
+        ) {
+            res.status(400).json({
+                ok: false,
+                message:
+                    "El campo 'loteFisicoIds' debe ser una lista",
             });
             return;
         }
@@ -265,6 +281,19 @@ export async function updateCosecha(
                 loteIds: req.body.loteIds.map(
                     (loteId: unknown) => Number(loteId),
                 ),
+            }),
+
+            ...(req.body.loteFisicoIds !==
+                undefined && {
+                loteFisicoIds:
+                    req.body.loteFisicoIds.map(
+                        (
+                            loteFisicoId: unknown,
+                        ) =>
+                            Number(
+                                loteFisicoId,
+                            ),
+                    ),
             }),
 
             ...(req.body.trabajadores !== undefined && {

@@ -119,50 +119,137 @@ function buildTrabajadoresInput(data: CosechaInput): CosechaTrabajadorInput[] {
     return [];
 }
 
-function normalizeCosechaResponse<T extends Record<string, any>>(
+function normalizeCosechaResponse<
+    T extends Record<string, any>
+>(
     cosecha: T | null,
 ) {
     if (!cosecha) {
         return null;
     }
 
-    const relacionesTrabajadores = Array.isArray(
-        cosecha.CosechaTrabajador,
-    )
-        ? cosecha.CosechaTrabajador
-        : [];
+    /*
+     * ==========================================
+     * TRABAJADORES
+     * ==========================================
+     */
+    const relacionesTrabajadores =
+        Array.isArray(
+            cosecha.CosechaTrabajador,
+        )
+            ? cosecha.CosechaTrabajador
+            : [];
 
-    const cosechaTrabajadores = relacionesTrabajadores.map(
-        (relacion: any) => ({
-            id: relacion.id,
-            cosechaId: relacion.cosechaId,
-            trabajadorId: relacion.trabajadorId,
-            kilosAsignados: relacion.kilosAsignados,
-            createdAt: relacion.createdAt,
-            trabajador: relacion.Trabajador ?? null,
-        }),
-    );
+    const cosechaTrabajadores =
+        relacionesTrabajadores.map(
+            (relacion: any) => ({
+                id:
+                    relacion.id,
 
+                cosechaId:
+                    relacion.cosechaId,
+
+                trabajadorId:
+                    relacion.trabajadorId,
+
+                kilosAsignados:
+                    relacion.kilosAsignados,
+
+                createdAt:
+                    relacion.createdAt,
+
+                trabajador:
+                    relacion.Trabajador ??
+                    null,
+            }),
+        );
+
+    /*
+     * ==========================================
+     * LOTES FÍSICOS / CUARTELES
+     * ==========================================
+     */
+    const relacionesLotesFisicos =
+        Array.isArray(
+            cosecha.lotesFisicos,
+        )
+            ? cosecha.lotesFisicos
+            : [];
+
+    const cosechasLotesFisicos =
+        relacionesLotesFisicos.map(
+            (relacion: any) => ({
+                id:
+                    relacion.id,
+
+                cosechaId:
+                    relacion.cosechaId,
+
+                loteFisicoId:
+                    relacion.loteFisicoId,
+
+                createdAt:
+                    relacion.createdAt,
+
+                loteFisico:
+                    relacion.loteFisico ??
+                    null,
+            }),
+        );
+
+    /*
+     * Quitamos nombres internos de Prisma
+     * y devolvemos estructura pensada
+     * para el frontend.
+     */
     const {
-        CosechaTrabajador: _cosechaTrabajador,
+        CosechaTrabajador:
+        _cosechaTrabajador,
+
+        lotesFisicos:
+        _lotesFisicos,
+
         ...rest
     } = cosecha;
 
     return {
         ...rest,
+
         cosechaTrabajadores,
-        cantidadCosechadores: cosechaTrabajadores.length,
+
+        cosechasLotesFisicos,
+
+        cantidadCosechadores:
+            cosechaTrabajadores.length,
     };
 }
 
 export async function listarCosechas() {
-    const cosechas = await prisma.cosecha.findMany({
-        include: cosechaIncludeDefault,
-        orderBy: {
-            fecha: "desc",
+    const cosechas =
+        await prisma.cosecha.findMany({
+            include:
+                cosechaIncludeDefault,
+
+            orderBy: {
+                fecha:
+                    "desc",
+            },
+        });
+
+    return cosechas.map(
+        (cosecha) => {
+            const normalizada =
+                normalizeCosechaResponse(
+                    cosecha,
+                );
+
+            return normalizada
+                ? enriquecerCosechaConSaldo(
+                    normalizada,
+                )
+                : null;
         },
-    });
-    return cosechas.map(enriquecerCosechaConSaldo);
+    ).filter(Boolean);
 }
 
 export async function listarCosechasConSaldo() {
@@ -178,12 +265,33 @@ export async function listarCosechasConSaldo() {
     };
 }
 
-export async function obtenerCosechaPorId(id: number) {
-    const cosecha = await prisma.cosecha.findUnique({
-        where: { id },
-        include: cosechaIncludeDefault,
-    });
-    return cosecha ? enriquecerCosechaConSaldo(cosecha) : null;
+export async function obtenerCosechaPorId(
+    id: number,
+) {
+    const cosecha =
+        await prisma.cosecha.findUnique({
+            where: {
+                id,
+            },
+
+            include:
+                cosechaIncludeDefault,
+        });
+
+    if (!cosecha) {
+        return null;
+    }
+
+    const normalizada =
+        normalizeCosechaResponse(
+            cosecha,
+        );
+
+    return normalizada
+        ? enriquecerCosechaConSaldo(
+            normalizada,
+        )
+        : null;
 }
 
 export async function crearCosecha(data: CosechaInput) {
@@ -260,142 +368,330 @@ export async function crearCosecha(data: CosechaInput) {
         include: cosechaIncludeDefault,
     });
 
-    return enriquecerCosechaConSaldo(creada);
+    const normalizada =
+        normalizeCosechaResponse(
+            creada,
+        );
+
+    return normalizada
+        ? enriquecerCosechaConSaldo(
+            normalizada,
+        )
+        : null;
 }
 
 export async function actualizarCosecha(
     id: number,
     data: Partial<CosechaInput>,
 ) {
-    const loteIds = data.loteIds;
-    const loteFisicoIds = data.loteFisicoIds;
-    const trabajadores = data.trabajadores;
+    const loteIds =
+        data.loteIds;
 
-    const rawTipo = data.tipo_cosecha || data.tipoCosecha;
+    const loteFisicoIds =
+        data.loteFisicoIds;
+
+    const trabajadores =
+        data.trabajadores;
+
+    const rawTipo =
+        data.tipo_cosecha ||
+        data.tipoCosecha;
+
     const tipoCosechaFinal =
-        rawTipo !== undefined ? normalizeTipoCosecha(rawTipo) : undefined;
+        rawTipo !== undefined
+            ? normalizeTipoCosecha(
+                rawTipo,
+            )
+            : undefined;
+
     const observacionFinal =
         data.observacion !== undefined
-            ? (data.observacion?.trim() || null)
-            : data.observaciones !== undefined
-                ? (data.observaciones?.trim() || null)
+            ? (
+                data.observacion?.trim() ||
+                null
+            )
+            : data.observaciones !==
+                undefined
+                ? (
+                    data.observaciones?.trim() ||
+                    null
+                )
                 : undefined;
 
-    return prisma.$transaction(async (tx) => {
-        await tx.cosecha.update({
-            where: { id },
-            data: {
-                ...(data.fecha && {
-                    fecha: new Date(data.fecha),
-                }),
-                ...(data.kilosCosechados !== undefined && {
-                    kilosCosechados: Number(data.kilosCosechados),
-                }),
-                ...(data.lotes !== undefined && {
-                    lotes: data.lotes,
-                }),
-                ...(data.totalHectareas !== undefined && {
-                    totalHectareas: Number(data.totalHectareas),
-                }),
-                ...(tipoCosechaFinal !== undefined && {
-                    tipoCosecha: tipoCosechaFinal,
-                }),
-                ...(data.varietal !== undefined && {
-                    varietal: normalizeVarietal(data.varietal),
-                }),
-                ...(observacionFinal !== undefined && {
-                    observacion: observacionFinal,
-                }),
-            },
-        });
-
-        if (loteIds !== undefined) {
-            await tx.cosechaLote.deleteMany({
+    /*
+     * ==========================================
+     * TRANSACCIÓN
+     *
+     * Dentro dejamos únicamente las escrituras.
+     * ==========================================
+     */
+    await prisma.$transaction(
+        async (tx) => {
+            /*
+             * Actualización principal de cosecha
+             */
+            await tx.cosecha.update({
                 where: {
-                    cosechaId: id,
+                    id,
                 },
-            });
 
-            if (loteIds.length > 0) {
-                await tx.cosechaLote.createMany({
-                    data: loteIds.map((loteId) => ({
-                        cosechaId: id,
-                        loteId: Number(loteId),
-                    })),
-                    skipDuplicates: true,
-                });
-            }
-        }
-
-        if (loteFisicoIds !== undefined) {
-            await tx.cosechaLoteFisico.deleteMany({
-                where: {
-                    cosechaId: id,
-                },
-            });
-
-            if (loteFisicoIds.length > 0) {
-                await tx.cosechaLoteFisico.createMany({
-                    data: loteFisicoIds.map((loteFisicoId) => ({
-                        cosechaId: id,
-                        loteFisicoId: Number(loteFisicoId),
-                    })),
-                    skipDuplicates: true,
-                });
-            }
-        }
-
-        if (trabajadores !== undefined) {
-            await tx.cosechaTrabajador.deleteMany({
-                where: {
-                    cosechaId: id,
-                },
-            });
-
-            if (trabajadores.length > 0) {
-                await tx.cosechaTrabajador.createMany({
-                    data: trabajadores.map(
-                        (item: CosechaTrabajadorInput) => ({
-                            cosechaId: id,
-                            trabajadorId: Number(item.trabajadorId),
-                            kilosAsignados:
-                                item.kilosAsignados !== undefined &&
-                                    item.kilosAsignados !== null
-                                    ? Number(item.kilosAsignados)
-                                    : null,
-                        }),
-                    ),
-                    skipDuplicates: true,
-                });
-            }
-        }
-
-        if (
-            trabajadores === undefined &&
-            data.trabajadorId !== undefined &&
-            data.trabajadorId !== null
-        ) {
-            await tx.cosechaTrabajador.deleteMany({
-                where: {
-                    cosechaId: id,
-                },
-            });
-
-            await tx.cosechaTrabajador.create({
                 data: {
-                    cosechaId: id,
-                    trabajadorId: Number(data.trabajadorId),
+                    ...(data.fecha && {
+                        fecha:
+                            new Date(
+                                data.fecha,
+                            ),
+                    }),
+
+                    ...(data.kilosCosechados !==
+                        undefined && {
+                        kilosCosechados:
+                            Number(
+                                data.kilosCosechados,
+                            ),
+                    }),
+
+                    ...(data.lotes !==
+                        undefined && {
+                        lotes:
+                            data.lotes,
+                    }),
+
+                    ...(data.totalHectareas !==
+                        undefined && {
+                        totalHectareas:
+                            Number(
+                                data.totalHectareas,
+                            ),
+                    }),
+
+                    ...(tipoCosechaFinal !==
+                        undefined && {
+                        tipoCosecha:
+                            tipoCosechaFinal,
+                    }),
+
+                    ...(data.varietal !==
+                        undefined && {
+                        varietal:
+                            normalizeVarietal(
+                                data.varietal,
+                            ),
+                    }),
+
+                    ...(observacionFinal !==
+                        undefined && {
+                        observacion:
+                            observacionFinal,
+                    }),
                 },
             });
-        }
 
-        const actualizada = await tx.cosecha.findUnique({
-            where: { id },
-            include: cosechaIncludeDefault,
+            /*
+             * ==========================================
+             * LOTES DE PROCESO
+             * ==========================================
+             */
+            if (
+                loteIds !== undefined
+            ) {
+                await tx.cosechaLote.deleteMany({
+                    where: {
+                        cosechaId:
+                            id,
+                    },
+                });
+
+                if (
+                    loteIds.length > 0
+                ) {
+                    await tx.cosechaLote.createMany({
+                        data:
+                            loteIds.map(
+                                (
+                                    loteId,
+                                ) => ({
+                                    cosechaId:
+                                        id,
+
+                                    loteId:
+                                        Number(
+                                            loteId,
+                                        ),
+                                }),
+                            ),
+
+                        skipDuplicates:
+                            true,
+                    });
+                }
+            }
+
+            /*
+             * ==========================================
+             * LOTES FÍSICOS / CUARTELES
+             * ==========================================
+             */
+            if (
+                loteFisicoIds !==
+                undefined
+            ) {
+                await tx.cosechaLoteFisico.deleteMany({
+                    where: {
+                        cosechaId:
+                            id,
+                    },
+                });
+
+                if (
+                    loteFisicoIds.length >
+                    0
+                ) {
+                    await tx.cosechaLoteFisico.createMany({
+                        data:
+                            loteFisicoIds.map(
+                                (
+                                    loteFisicoId,
+                                ) => ({
+                                    cosechaId:
+                                        id,
+
+                                    loteFisicoId:
+                                        Number(
+                                            loteFisicoId,
+                                        ),
+                                }),
+                            ),
+
+                        skipDuplicates:
+                            true,
+                    });
+                }
+            }
+
+            /*
+             * ==========================================
+             * TRABAJADORES
+             * ==========================================
+             */
+            if (
+                trabajadores !==
+                undefined
+            ) {
+                await tx.cosechaTrabajador.deleteMany({
+                    where: {
+                        cosechaId:
+                            id,
+                    },
+                });
+
+                if (
+                    trabajadores.length >
+                    0
+                ) {
+                    await tx.cosechaTrabajador.createMany({
+                        data:
+                            trabajadores.map(
+                                (
+                                    item:
+                                        CosechaTrabajadorInput,
+                                ) => ({
+                                    cosechaId:
+                                        id,
+
+                                    trabajadorId:
+                                        Number(
+                                            item.trabajadorId,
+                                        ),
+
+                                    kilosAsignados:
+                                        item.kilosAsignados !==
+                                            undefined &&
+                                            item.kilosAsignados !==
+                                            null
+                                            ? Number(
+                                                item.kilosAsignados,
+                                            )
+                                            : null,
+                                }),
+                            ),
+
+                        skipDuplicates:
+                            true,
+                    });
+                }
+            }
+
+            /*
+             * Compatibilidad con payload antiguo
+             * de un solo trabajador.
+             */
+            if (
+                trabajadores ===
+                undefined &&
+                data.trabajadorId !==
+                undefined &&
+                data.trabajadorId !==
+                null
+            ) {
+                await tx.cosechaTrabajador.deleteMany({
+                    where: {
+                        cosechaId:
+                            id,
+                    },
+                });
+
+                await tx.cosechaTrabajador.create({
+                    data: {
+                        cosechaId:
+                            id,
+
+                        trabajadorId:
+                            Number(
+                                data.trabajadorId,
+                            ),
+                    },
+                });
+            }
+        },
+        {
+            timeout:
+                10000,
+        },
+    );
+
+    /*
+     * ==========================================
+     * CONSULTA FUERA DE LA TRANSACCIÓN
+     * ==========================================
+     *
+     * Una vez confirmados los cambios consultamos
+     * la cosecha completa con sus relaciones.
+     */
+    const actualizada =
+        await prisma.cosecha.findUnique({
+            where: {
+                id,
+            },
+
+            include:
+                cosechaIncludeDefault,
         });
 
-        return actualizada ? enriquecerCosechaConSaldo(actualizada) : null;
-    });
+    if (!actualizada) {
+        return null;
+    }
+
+    const normalizada =
+        normalizeCosechaResponse(
+            actualizada,
+        );
+
+    return normalizada
+        ? enriquecerCosechaConSaldo(
+            normalizada,
+        )
+        : null;
 }
 
 export async function eliminarCosecha(id: number) {

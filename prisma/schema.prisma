@@ -99,14 +99,13 @@ model CosechaLote {
 }
 
 model Usuario {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  nombre    String
-  rol       String   @default("ADMIN")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  id            Int            @id @default(autoincrement())
+  email         String         @unique
+  password      String
+  nombre        String
+  rol           String         @default("ADMIN")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   refreshTokens RefreshToken[]
 }
 
@@ -117,8 +116,7 @@ model RefreshToken {
   expiresAt DateTime
   revokedAt DateTime?
   createdAt DateTime  @default(now())
-
-  usuario Usuario @relation( fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@index([expiresAt])
   @@index([usuarioId])
