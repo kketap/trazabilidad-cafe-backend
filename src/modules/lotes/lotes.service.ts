@@ -1,6 +1,8 @@
 // src/modules/lotes/lotes.service.ts
 import { prisma } from "../../config/prisma";
-import type { EstadoLote, TipoCodigoLote } from "@prisma/client";
+import { Prisma, type EstadoLote, type TipoCodigoLote } from "@prisma/client";
+
+export class ErrorValidacionLote extends Error {}
 
 export type LoteCosechaItem = {
     cosechaId: number;
@@ -155,7 +157,7 @@ export async function crearLote(data: LoteInput) {
     const tipoCodigo = data.tipoCodigo ?? "COMERCIAL";
 
     if (tipoCodigo === "PERSONALIZADO" && !data.codigo?.trim()) {
-        throw new Error("Debe ingresar un código personalizado para el lote");
+        throw new ErrorValidacionLote("Debe ingresar un código personalizado para el lote");
     }
 
     const codigo =
@@ -177,7 +179,7 @@ export async function crearLote(data: LoteInput) {
                 });
 
                 if (!cosecha) {
-                    throw new Error(`La cosecha ID ${item.cosechaId} no existe`);
+                    throw new ErrorValidacionLote(`La cosecha ID ${item.cosechaId} no existe`);
                 }
 
                 const kilosYaUsados = cosecha.cosechaLotes.reduce(
@@ -191,7 +193,7 @@ export async function crearLote(data: LoteInput) {
 
                 const kilosAUsar = Number(item.kilosUsados);
                 if (kilosAUsar > saldoDisponible) {
-                    throw new Error(
+                    throw new ErrorValidacionLote(
                         `La cosecha COS-${String(cosecha.id).padStart(3, "0")} solo tiene ${saldoDisponible} kg disponibles, se intentó usar ${kilosAUsar} kg`
                     );
                 }
@@ -323,27 +325,30 @@ export async function actualizarLote(id: number, data: Partial<LoteInput>) {
 }
 
 /**
- * Desactiva un lote si tiene cosechas asociadas.
- * Si no tiene relaciones, se elimina físicamente.
+ * Conserva los lotes vinculados al historial productivo.
  */
 export async function eliminarLote(id: number) {
-    const cosechasAsociadas = await prisma.cosechaLote.count({
-        where: {
-            loteId: id,
-        },
-    });
-
-    if (cosechasAsociadas > 0) {
-        return prisma.lote.update({
-            where: { id },
-            data: {
-                activo: false,
-                estado: "INACTIVO",
+    return prisma.$transaction(async (tx) => {
+        const { count } = await tx.lote.deleteMany({
+            where: {
+                id,
+                ordenTrillaId: null,
+                cosechaLotes: { none: {} },
+                ProcesoTrazabilidad: { none: {} },
+                procesoLotes: { none: {} },
+                secados: { none: {} },
+                secadoLotes: { none: {} },
+                empaques: { none: {} },
+                ordenTrillaLotes: { none: {} },
             },
         });
-    }
 
-    return prisma.lote.delete({
-        where: { id },
-    });
+        if (count > 0) return "eliminado";
+
+        await tx.lote.update({
+            where: { id },
+            data: { activo: false, estado: "INACTIVO" },
+        });
+        return "desactivado";
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

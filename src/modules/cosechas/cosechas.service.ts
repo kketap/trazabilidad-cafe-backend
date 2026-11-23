@@ -902,7 +902,7 @@ export async function obtenerReporteCosechas() {
         {
             trabajadorId: number;
             nombre: string;
-            dni: string;
+            dni: string | null;
             kilos: number;
             cosechas: number;
         }
@@ -1192,11 +1192,28 @@ export async function previewCargaMasivaCosechas(
         throw new Error("El archivo Excel está vacío o no contiene filas de datos.");
     }
 
+    const rango = XLSX.utils.decode_range(worksheet["!ref"] ?? "A1");
+    const columnasIdentificador = new Map<string, number>();
+    for (let columna = rango.s.c; columna <= rango.e.c; columna++) {
+        const encabezado = worksheet[XLSX.utils.encode_cell({ r: rango.s.r, c: columna })]?.v;
+        const clave = String(encabezado ?? "").trim().toUpperCase();
+        if (clave === "CODIGOS_LOTES" || clave === "IDENTIFICADOR_TRABAJADOR") {
+            columnasIdentificador.set(clave, columna);
+        }
+    }
     const rows = rawRows
         .map((row, index) => {
             const normalizedRow: Record<string, any> = {};
             for (const [key, value] of Object.entries(row)) {
-                normalizedRow[key.trim().toUpperCase()] = value;
+                const clave = key.trim().toUpperCase();
+                const columna = columnasIdentificador.get(clave);
+                const celda = columna === undefined ? undefined : worksheet[XLSX.utils.encode_cell({
+                    r: row.__rowNum__ ?? rango.s.r + index + 1,
+                    c: columna,
+                })];
+                const texto = celda?.w?.trim();
+                normalizedRow[clave] = typeof value === "number" && texto && /^\d+$/.test(texto) &&
+                    Number(texto) === value ? texto : value;
             }
             return {
                 filaNumero: index + 2,
@@ -1285,7 +1302,7 @@ export async function previewCargaMasivaCosechas(
         }
 
         const codigosLotesRaw = data["CODIGOS_LOTES"];
-        const codigosLotes = codigosLotesRaw
+        const codigosLotes = codigosLotesRaw != null
             ? String(codigosLotesRaw)
                 .split(",")
                 .map((c) => c.trim())
@@ -1350,7 +1367,7 @@ export async function previewCargaMasivaCosechas(
     const trabajadorMap = new Map<string, { id: number; nombreCompleto: string }>();
     for (const t of trabajadoresDb) {
         const nombreCompleto = `${t.nombres}${t.apellidos ? ` ${t.apellidos}` : ""}`;
-        trabajadorMap.set(t.dni.trim(), { id: t.id, nombreCompleto });
+        if (t.dni) trabajadorMap.set(t.dni.trim(), { id: t.id, nombreCompleto });
     }
 
     const loteMap = new Map<string, { id: number; nombre: string | null }>();
@@ -1516,7 +1533,7 @@ export async function confirmarCargaMasivaCosechas(filas: FilaConfirmacionInput[
 
     const trabajadorMap = new Map<string, number>();
     for (const t of trabajadoresDb) {
-        trabajadorMap.set(t.dni.trim(), t.id);
+        if (t.dni) trabajadorMap.set(t.dni.trim(), t.id);
     }
 
     const loteMap = new Map<string, number>();

@@ -49,7 +49,7 @@ export async function getProcesos(_req: Request, res: Response) {
  * Crea proceso de trazabilidad.
  *
  * Nuevo flujo:
- * - Preferentemente se envía loteId.
+ * - Se envía lotes[] con los kilos aportados por cada lote.
  *
  * Compatibilidad:
  * - Todavía puede recibir cosechaId para procesos antiguos.
@@ -59,8 +59,12 @@ export async function createProceso(req: Request, res: Response) {
         const {
             fecha,
             fechaInicio,
+            fechaFin,
             duracionHoras,
             loteId,
+            lotes,
+            cosechaId,
+            tipoProceso,
             etapa,
             kilosIngresados,
             kilosResultantes,
@@ -77,31 +81,33 @@ export async function createProceso(req: Request, res: Response) {
 
         if (
             !fecha ||
-            !fechaInicio ||
-            duracionHoras === undefined ||
-            !loteId ||
-            !etapa ||
-            kilosIngresados === undefined ||
-            kilosResultantes === undefined
+            (lotes === undefined && loteId == null) ||
+            kilosIngresados === undefined
         ) {
             res.status(400).json({
                 ok: false,
                 message:
-                    "Los campos 'fecha', 'fechaInicio', 'duracionHoras', " +
-                    "'loteId', 'etapa', 'kilosIngresados' y " +
-                    "'kilosResultantes' son requeridos",
+                    "Los campos 'fecha', 'lotes' (o 'loteId' legado), " +
+                    "y 'kilosIngresados' son requeridos",
             });
             return;
         }
 
         const proceso = await crearProceso({
             fecha: String(fecha),
-            fechaInicio: String(fechaInicio),
-            duracionHoras: Number(duracionHoras),
-            loteId: Number(loteId),
-            etapa: String(etapa),
+            ...(fechaInicio !== undefined && { fechaInicio: fechaInicio === null ? null : String(fechaInicio) }),
+            ...(fechaFin !== undefined && { fechaFin: fechaFin === null ? null : String(fechaFin) }),
+            ...(duracionHoras !== undefined && { duracionHoras: Number(duracionHoras) }),
+            ...(lotes !== undefined && { lotes }),
+            ...(loteId !== undefined && { loteId: loteId === null ? null : Number(loteId) }),
+            ...(cosechaId !== undefined && { cosechaId: cosechaId === null ? null : Number(cosechaId) }),
+            ...(tipoProceso !== undefined && { tipoProceso }),
+            etapa: etapa == null ? null : String(etapa),
+            inicioOxidacion: req.body.inicioOxidacion,
+            finOxidacion: req.body.finOxidacion,
+            tanqueOxidacion: req.body.tanqueOxidacion,
             kilosIngresados: Number(kilosIngresados),
-            kilosResultantes: Number(kilosResultantes),
+            kilosResultantes: kilosResultantes == null ? null : Number(kilosResultantes),
             gradosBrix:
                 gradosBrix !== undefined && gradosBrix !== null
                     ? Number(gradosBrix)
@@ -184,7 +190,7 @@ export async function updateProceso(req: Request, res: Response) {
     try {
         const id = Number(req.params.id);
 
-        if (Number.isNaN(id)) {
+        if (!Number.isSafeInteger(id) || id <= 0) {
             res.status(400).json({
                 ok: false,
                 message: "ID de proceso inválido",
@@ -198,11 +204,27 @@ export async function updateProceso(req: Request, res: Response) {
             }),
 
             ...(req.body.fechaInicio !== undefined && {
-                fechaInicio: String(req.body.fechaInicio),
+                fechaInicio: req.body.fechaInicio === null ? null : String(req.body.fechaInicio),
+            }),
+
+            ...(req.body.fechaFin !== undefined && {
+                fechaFin: req.body.fechaFin === null ? null : String(req.body.fechaFin),
+            }),
+
+            ...(req.body.cosechaId !== undefined && {
+                cosechaId: req.body.cosechaId === null ? null : Number(req.body.cosechaId),
+            }),
+
+            ...(req.body.tipoProceso !== undefined && {
+                tipoProceso: req.body.tipoProceso,
             }),
 
             ...(req.body.duracionHoras !== undefined && {
                 duracionHoras: Number(req.body.duracionHoras),
+            }),
+
+            ...(req.body.lotes !== undefined && {
+                lotes: req.body.lotes,
             }),
 
             ...(req.body.loteId !== undefined && {
@@ -212,6 +234,9 @@ export async function updateProceso(req: Request, res: Response) {
                         : null,
             }),
 
+            inicioOxidacion: req.body.inicioOxidacion,
+            finOxidacion: req.body.finOxidacion,
+            tanqueOxidacion: req.body.tanqueOxidacion,
             ...(req.body.etapa !== undefined && {
                 etapa: String(req.body.etapa),
             }),
@@ -309,7 +334,7 @@ export async function deleteProceso(req: Request, res: Response) {
     try {
         const id = Number(req.params.id);
 
-        if (Number.isNaN(id)) {
+        if (!Number.isSafeInteger(id) || id <= 0) {
             res.status(400).json({
                 ok: false,
                 message: "ID de proceso inválido",

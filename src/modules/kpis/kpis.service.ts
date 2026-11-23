@@ -78,8 +78,8 @@ export async function obtenerKpisTrazabilidad() {
     const duracionPromedioHoras = procesos.length > 0 ? totalDuracionHorasProcesos / procesos.length : 0;
 
     const totalIngresadoSecado = secados.reduce((acc, s) => acc + s.kilosIngresados, 0);
-    const totalResultanteSecado = secados.reduce((acc, s) => acc + s.kilosResultantes, 0);
-    const totalMermaSecado = secados.reduce((acc, s) => acc + s.merma, 0);
+    const totalResultanteSecado = secados.reduce((acc, s) => acc + (s.kilosResultantes ?? 0), 0);
+    const totalMermaSecado = secados.reduce((acc, s) => acc + (s.merma ?? 0), 0);
     const porcMermaSecadoPromedio = totalIngresadoSecado > 0 ? (totalMermaSecado / totalIngresadoSecado) * 100 : 0;
 
     const totalKilosEnviadosTrilla = ordenesTrilla.reduce((acc, t) => acc + t.kilosEnviados, 0);
@@ -144,8 +144,8 @@ export async function obtenerKpisTrazabilidad() {
                 fechaInicio: string;
                 fechaFin: string | null;
                 kilosIngresados: number;
-                kilosResultantes: number;
-                merma: number;
+                kilosResultantes: number | null;
+                merma: number | null;
                 observaciones: string | null;
                 loteCodigo: string | null;
             }[];
@@ -156,8 +156,8 @@ export async function obtenerKpisTrazabilidad() {
         const perfil = s.perfilProceso || "Sin perfil asignado";
         const cur = porPerfilSecadoMap.get(perfil) || { perfil, kilosIngresados: 0, kilosResultantes: 0, merma: 0, cantidad: 0, detalles: [] };
         cur.kilosIngresados += s.kilosIngresados;
-        cur.kilosResultantes += s.kilosResultantes;
-        cur.merma += s.merma;
+        cur.kilosResultantes += s.kilosResultantes ?? 0;
+        cur.merma += s.merma ?? 0;
         cur.cantidad += 1;
         cur.detalles.push({
             id: s.id,

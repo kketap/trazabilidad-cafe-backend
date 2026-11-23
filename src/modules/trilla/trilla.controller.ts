@@ -43,6 +43,8 @@ export async function createOrdenTrillaController(req: Request, res: Response) {
   try {
     const {
       loteIds,
+      empaqueId,
+      sacosEnviados,
       kilosEnviados,
       codigoTrilla,
       numeroGuia,
@@ -58,7 +60,7 @@ export async function createOrdenTrillaController(req: Request, res: Response) {
       cascarilla,
     } = req.body;
 
-    if (!Array.isArray(loteIds) || loteIds.length === 0) {
+    if (empaqueId == null && (!Array.isArray(loteIds) || loteIds.length === 0)) {
       res.status(400).json({ ok: false, message: "Debe seleccionar al menos un lote (loteIds)" });
       return;
     }
@@ -69,7 +71,9 @@ export async function createOrdenTrillaController(req: Request, res: Response) {
     }
 
     const orden = await crearOrdenTrilla({
-      loteIds: loteIds.map((id) => Number(id)),
+      loteIds: Array.isArray(loteIds) ? loteIds.map(Number) : undefined,
+      empaqueId: empaqueId == null ? undefined : Number(empaqueId),
+      sacosEnviados,
       kilosEnviados: Number(kilosEnviados),
       codigoTrilla: codigoTrilla ? String(codigoTrilla).trim() : undefined,
       numeroGuia: numeroGuia ? String(numeroGuia).trim() : null,
@@ -113,6 +117,11 @@ export async function updateOrdenTrillaController(req: Request, res: Response) {
       tipoSaco,
       kilosEnviados,
       kilosNetos,
+      estadoManual,
+      numeroGuiaHayland,
+      exportable2,
+      exportable3,
+      exportable4,
       loteIds,
       exportable,
       recuperado,
@@ -126,6 +135,11 @@ export async function updateOrdenTrillaController(req: Request, res: Response) {
     } = req.body;
 
     const orden = await actualizarOrdenTrilla(id, {
+      estadoManual,
+      numeroGuiaHayland,
+      exportable2,
+      exportable3,
+      exportable4,
       ...(codigoTrilla !== undefined && { codigoTrilla: String(codigoTrilla).trim() }),
       ...(numeroGuia !== undefined && { numeroGuia: numeroGuia !== null ? String(numeroGuia).trim() : null }),
       ...(fechaDespacho !== undefined && { fechaDespacho: String(fechaDespacho) }),

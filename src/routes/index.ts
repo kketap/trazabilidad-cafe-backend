@@ -12,6 +12,7 @@ import empaqueRoutes from "../modules/empaque/empaque.routes";
 import trillaRoutes from "../modules/trilla/trilla.routes";
 import ventasRoutes from "../modules/ventas/ventas.routes";
 import fundosRoutes from "../modules/fundos/fundos.routes";
+import lotesFisicosRoutes from "../modules/lotes-fisicos/lotes-fisicos.routes"
 import { verifyToken } from "../middlewares/verifyToken";
 
 const router = Router();
@@ -38,5 +39,6 @@ router.use("/empaque", empaqueRoutes);
 router.use("/trilla", trillaRoutes);
 router.use("/ventas", ventasRoutes);
 router.use("/fundos", fundosRoutes);
+router.use("/lotes-fisicos", lotesFisicosRoutes)
 
 export default router;

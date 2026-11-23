@@ -1,4 +1,5 @@
 // src/modules/empaque/empaque.service.ts
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 
 export type EmpaqueInput = {
@@ -23,10 +24,11 @@ export type EmpaqueInput = {
 
 const empaqueIncludeDefault = {
     lote: true,
-    secado: true,
+    secado: { include: { secadoLotes: { include: { lote: true } } } },
+    ordenesTrilla: { select: { kilosEnviados: true } },
     empaqueSecados: {
         include: {
-            secado: true,
+            secado: { include: { secadoLotes: { include: { lote: true } } } },
         },
     },
 };
@@ -71,11 +73,33 @@ export async function obtenerEmpaquePorId(id: number) {
     });
 }
 
-export async function crearEmpaque(data: EmpaqueInput) {
-    const kilosIngresados = Number(data.kilosIngresados);
-    const kilosResultantes = Number(data.kilosResultantes);
-    const merma = kilosIngresados - kilosResultantes;
+async function obtenerPesoSeco(
+    tx: Prisma.TransactionClient,
+    secadoIds: number[],
+    empaqueId?: number,
+) {
+    const secados = await tx.secado.findMany({
+        where: { id: { in: secadoIds } },
+        select: { kilosResultantes: true },
+    });
+    if (secados.length !== secadoIds.length || secados.some(({ kilosResultantes }) => kilosResultantes === null)) {
+        throw new Error("Seleccione secados existentes, sin duplicados y con el peso seco registrado");
+    }
+    const otroIngreso = await tx.empaque.findFirst({
+        where: {
+            ...(empaqueId !== undefined && { id: { not: empaqueId } }),
+            OR: [
+                { secadoId: { in: secadoIds } },
+                { empaqueSecados: { some: { secadoId: { in: secadoIds } } } },
+            ],
+        },
+        select: { id: true },
+    });
+    if (otroIngreso) throw new Error("Uno o más secados ya están registrados en Almacén Pergamino");
+    return Number(secados.reduce((total, secado) => total + (secado.kilosResultantes ?? 0), 0).toFixed(2));
+}
 
+export async function crearEmpaque(data: EmpaqueInput) {
     const secadoIds =
         Array.isArray(data.secadoIds) && data.secadoIds.length > 0
             ? data.secadoIds.map(Number)
@@ -94,6 +118,10 @@ export async function crearEmpaque(data: EmpaqueInput) {
             throw new Error("Lote no encontrado");
         }
 
+        const pesoSeco = secadoIds.length ? await obtenerPesoSeco(tx, secadoIds) : null;
+        const kilosIngresados = pesoSeco ?? Number(data.kilosIngresados);
+        const kilosResultantes = pesoSeco ?? Number(data.kilosResultantes);
+        const merma = kilosIngresados - kilosResultantes;
         const codigo = data.codigo?.trim() || (await generarCodigoEmpaque());
 
         const empaque = await tx.empaque.create({
@@ -127,7 +155,7 @@ export async function crearEmpaque(data: EmpaqueInput) {
             include: empaqueIncludeDefault,
         });
 
-        await tx.lote.update({
+        if (!secadoIds.length) await tx.lote.update({
             where: { id: Number(data.loteId) },
             data: {
                 estado: "EN_ALMACEN",
@@ -136,30 +164,44 @@ export async function crearEmpaque(data: EmpaqueInput) {
         });
 
         return empaque;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function actualizarEmpaque(id: number, data: Partial<EmpaqueInput>) {
     return prisma.$transaction(async (tx) => {
         const empaqueExistente = await tx.empaque.findUnique({
             where: { id },
+            include: { empaqueSecados: true },
         });
 
         if (!empaqueExistente) {
             throw new Error("Proceso de empaque no encontrado");
         }
 
-        const kilosIngresados = data.kilosIngresados !== undefined ? Number(data.kilosIngresados) : empaqueExistente.kilosIngresados;
-        const kilosResultantes = data.kilosResultantes !== undefined ? Number(data.kilosResultantes) : empaqueExistente.kilosResultantes;
+        const anteriores = empaqueExistente.empaqueSecados.length
+            ? empaqueExistente.empaqueSecados.map(({ secadoId }) => secadoId)
+            : empaqueExistente.secadoId ? [empaqueExistente.secadoId] : [];
+        const secadoIds = data.secadoIds?.map(Number) ??
+            (data.secadoId !== undefined ? (data.secadoId ? [Number(data.secadoId)] : []) : anteriores);
+        const cambiaSecados = secadoIds.length !== anteriores.length ||
+            secadoIds.some((secadoId) => !anteriores.includes(secadoId));
+        const ordenes = await tx.ordenTrilla.count({ where: { empaqueId: id } });
+        if (ordenes && (cambiaSecados || (data.loteId !== undefined && data.loteId !== empaqueExistente.loteId) ||
+            (!secadoIds.length && data.kilosResultantes !== undefined &&
+                Number(data.kilosResultantes) !== empaqueExistente.kilosResultantes))) {
+            throw new Error("El registro tiene órdenes de trilla y su origen y peso ya están asociados");
+        }
+
+        const cambiaPeso = secadoIds.length && cambiaSecados;
+        const pesoSeco = cambiaPeso ? await obtenerPesoSeco(tx, secadoIds, id) : null;
+        const kilosIngresados = pesoSeco ?? (secadoIds.length ? empaqueExistente.kilosIngresados :
+            Number(data.kilosIngresados ?? empaqueExistente.kilosIngresados));
+        const kilosResultantes = pesoSeco ?? (secadoIds.length ? empaqueExistente.kilosResultantes :
+            Number(data.kilosResultantes ?? empaqueExistente.kilosResultantes));
         const merma = kilosIngresados - kilosResultantes;
-        const loteId = data.loteId !== undefined ? Number(data.loteId) : empaqueExistente.loteId;
+        const loteId = data.loteId ?? empaqueExistente.loteId;
 
-        const secadoIds =
-            data.secadoIds !== undefined
-                ? data.secadoIds.map(Number)
-                : undefined;
-
-        if (secadoIds !== undefined) {
+        if (cambiaSecados) {
             await tx.empaqueSecado.deleteMany({
                 where: { empaqueId: id },
             });
@@ -179,7 +221,8 @@ export async function actualizarEmpaque(id: number, data: Partial<EmpaqueInput>)
             data: {
                 ...(data.codigo !== undefined && { codigo: data.codigo?.trim() || null }),
                 ...(loteId ? { lote: { connect: { id: loteId } } } : {}),
-                ...(data.secadoId !== undefined ? (data.secadoId ? { secado: { connect: { id: Number(data.secadoId) } } } : { secado: { disconnect: true } }) : {}),
+                ...(cambiaSecados && { secado: secadoIds.length
+                    ? { connect: { id: secadoIds[0] } } : { disconnect: true } }),
                 fechaInicio: data.fechaInicio ? new Date(data.fechaInicio) : undefined,
                 fechaFin: data.fechaFin !== undefined ? (data.fechaFin ? new Date(data.fechaFin) : null) : undefined,
                 kilosIngresados,
@@ -198,7 +241,7 @@ export async function actualizarEmpaque(id: number, data: Partial<EmpaqueInput>)
             include: empaqueIncludeDefault,
         });
 
-        if (data.kilosResultantes !== undefined || data.loteId !== undefined) {
+        if (!secadoIds.length && (kilosResultantes !== empaqueExistente.kilosResultantes || loteId !== empaqueExistente.loteId)) {
             await tx.lote.update({
                 where: { id: loteId },
                 data: {
@@ -209,7 +252,7 @@ export async function actualizarEmpaque(id: number, data: Partial<EmpaqueInput>)
         }
 
         return empaqueActualizado;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function eliminarEmpaque(id: number) {

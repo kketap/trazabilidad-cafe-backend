@@ -1,0 +1,3 @@
+ALTER TABLE "Secado"
+  ALTER COLUMN "kilosResultantes" DROP NOT NULL,
+  ALTER COLUMN "merma" DROP NOT NULL;

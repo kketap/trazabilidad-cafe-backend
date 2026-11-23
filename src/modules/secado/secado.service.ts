@@ -1,6 +1,8 @@
 // src/modules/secado/secado.service.ts
 import { prisma } from "../../config/prisma";
 
+import { Prisma } from "@prisma/client";
+
 export type SecadoLoteItem = {
     loteId: number;
     kilosUsados: number;
@@ -13,7 +15,7 @@ export type SecadoInput = {
     fechaInicio: string | Date;
     fechaFin?: string | Date | null;
     kilosIngresados: number;
-    kilosResultantes: number;
+    kilosResultantes?: number | null;
     observaciones?: string | null;
     perfilProceso?: string | null;
     secadora?: string | null;
@@ -33,27 +35,51 @@ const secadoIncludeDefault = {
 /**
  * Genera el siguiente código de secado, por ejemplo SEC-NAT-001 o SEC-001.
  */
-async function generarCodigoSecado(perfil?: string | null): Promise<string> {
-    const prefijo = perfil ? `SEC-${perfil.toUpperCase().slice(0, 3)}` : "SEC";
-    const secadosExistentes = await prisma.secado.findMany({
+
+async function generarCodigoSecado(
+    tx: Prisma.TransactionClient,
+    perfil?: string | null,
+): Promise<string> {
+    const prefijo = perfil
+        ? `SEC-${perfil.toUpperCase().slice(0, 3)}`
+        : "SEC";
+
+    const secadosExistentes = await tx.secado.findMany({
         where: {
-            codigo: { startsWith: `${prefijo}-` },
+            codigo: {
+                startsWith: `${prefijo}-`,
+            },
         },
-        select: { codigo: true },
+        select: {
+            codigo: true,
+        },
     });
 
     const numerosUsados = secadosExistentes
-        .map((s) => {
-            if (!s.codigo) return 0;
-            const partes = s.codigo.split("-");
-            const num = Number(partes[partes.length - 1]);
-            return Number.isNaN(num) ? 0 : num;
-        })
-        .filter((n) => n > 0);
+        .map((secado) => {
+            if (!secado.codigo) {
+                return 0;
+            }
 
-    const siguiente = numerosUsados.length > 0 ? Math.max(...numerosUsados) + 1 : 1;
+            const partes = secado.codigo.split("-");
+
+            if (partes.slice(0, -1).join("-") !== prefijo) return 0;
+            const numero = Number(partes[partes.length - 1]);
+
+            return Number.isNaN(numero)
+                ? 0
+                : numero;
+        })
+        .filter((numero) => numero > 0);
+
+    const siguiente =
+        numerosUsados.length > 0
+            ? Math.max(...numerosUsados) + 1
+            : 1;
+
     return `${prefijo}-${String(siguiente).padStart(3, "0")}`;
 }
+
 
 export async function listarSecados() {
     return prisma.secado.findMany({
@@ -71,19 +97,81 @@ export async function obtenerSecadoPorId(id: number) {
     });
 }
 
+function validarAportes(lotes: SecadoLoteItem[], kilosIngresados: number) {
+    if (!Array.isArray(lotes) || !lotes.length || lotes.some((lote) =>
+        !lote || !Number.isSafeInteger(lote.loteId) || lote.loteId <= 0 ||
+        !Number.isFinite(lote.kilosUsados) || lote.kilosUsados <= 0
+    )) {
+        throw new Error("Seleccione lotes válidos e ingrese los kilos de cada aporte");
+    }
+    if (new Set(lotes.map((lote) => lote.loteId)).size !== lotes.length) {
+        throw new Error("Un lote no puede aparecer más de una vez");
+    }
+    const total = lotes.reduce((suma, lote) => suma + lote.kilosUsados, 0);
+    if (Math.abs(total - kilosIngresados) > 0.000001) {
+        throw new Error("La suma de los aportes debe coincidir con los kilos ingresados");
+    }
+}
+
+async function ajustarAportes(
+    tx: Prisma.TransactionClient,
+    anteriores: SecadoLoteItem[],
+    nuevos: SecadoLoteItem[],
+    secadoId?: number,
+) {
+    const previos = new Map(anteriores.map((lote) => [lote.loteId, lote.kilosUsados]));
+    const actuales = new Map(nuevos.map((lote) => [lote.loteId, lote.kilosUsados]));
+    const ids = [...new Set([...previos.keys(), ...actuales.keys()])].sort((a, b) => a - b);
+    for (const id of ids) {
+        const anterior = previos.get(id) ?? 0;
+        const nuevo = actuales.get(id) ?? 0;
+        if (anterior === nuevo) continue;
+
+        const lote = await tx.lote.findUnique({ where: { id } });
+        if (!lote) throw new Error(`El lote ID ${id} no fue encontrado`);
+        if (!lote.activo && nuevo > anterior) {
+            throw new Error(`El lote ${lote.codigo} se encuentra inactivo`);
+        }
+        const disponible = (lote.kilosActuales ?? lote.kilosIniciales ?? 0) + anterior;
+        const saldo = Number((disponible - nuevo).toFixed(2));
+        if (disponible + 0.000001 < nuevo) {
+            throw new Error(`El lote ${lote.codigo} tiene ${disponible} kg disponibles y se solicitaron ${nuevo} kg`);
+        }
+
+        const otrosSecados = nuevo === 0 && await tx.secado.count({
+            where: {
+                ...(secadoId !== undefined && { id: { not: secadoId } }),
+                OR: [{ loteId: id }, { secadoLotes: { some: { loteId: id } } }],
+            },
+        });
+        await tx.lote.update({
+            where: { id },
+            data: {
+                kilosActuales: Math.max(0, saldo),
+                estado: nuevo > 0 ? (secadoId !== undefined || saldo === 0 ? "EN_SECADO" : "EN_PROCESO")
+                    : otrosSecados ? "EN_SECADO" : "EN_PROCESO",
+            },
+        });
+    }
+}
+
 export async function crearSecado(data: SecadoInput) {
     const kilosIngresados = Number(data.kilosIngresados);
-    const kilosResultantes = Number(data.kilosResultantes);
+    const kilosResultantes = data.kilosResultantes == null ? null : Number(data.kilosResultantes);
 
     if (!Number.isFinite(kilosIngresados) || kilosIngresados <= 0) {
         throw new Error("Los kilos ingresados deben ser mayores que cero");
     }
 
-    if (!Number.isFinite(kilosResultantes) || kilosResultantes < 0) {
+    if (kilosResultantes !== null && (!Number.isFinite(kilosResultantes) || kilosResultantes < 0)) {
         throw new Error("Los kilos resultantes no pueden ser negativos");
     }
 
-    const merma = kilosIngresados - kilosResultantes;
+    if (kilosResultantes !== null && kilosResultantes > kilosIngresados) {
+        throw new Error("Los kilos resultantes no pueden superar los kilos ingresados");
+    }
+
+    const merma = kilosResultantes === null ? null : kilosIngresados - kilosResultantes;
 
     const secadora =
         data.secadora !== undefined && data.secadora !== null
@@ -112,87 +200,48 @@ export async function crearSecado(data: SecadoInput) {
         throw new Error("La temperatura mínima no puede ser mayor que la temperatura máxima");
     }
 
-    const lotesInput =
-        Array.isArray(data.lotes) && data.lotes.length > 0
-            ? data.lotes.filter(
-                (l) => Number(l.loteId) > 0 && Number(l.kilosUsados) > 0
-            )
-            : data.loteId
-                ? [{ loteId: Number(data.loteId), kilosUsados: kilosIngresados }]
-                : [];
+    const lotesInput = data.lotes ?? (data.loteId ? [{ loteId: data.loteId, kilosUsados: kilosIngresados }] : []);
+    validarAportes(lotesInput, kilosIngresados);
 
-    if (lotesInput.length === 0) {
-        throw new Error("Debe seleccionar al menos un lote de origen válido");
-    }
+    return prisma.$transaction(
+        async (tx) => {
+            await ajustarAportes(tx, [], lotesInput);
 
-    return prisma.$transaction(async (tx) => {
-        // Validar y descontar saldo de cada lote húmedo involucrado
-        for (const item of lotesInput) {
-            const lote = await tx.lote.findUnique({
-                where: { id: Number(item.loteId) },
-            });
+            const codigo =
+                data.codigo?.trim() ||
+                (await generarCodigoSecado(
+                    tx,
+                    data.perfilProceso,
+                ));
 
-            if (!lote) {
-                throw new Error(`El lote ID ${item.loteId} no fue encontrado`);
-            }
+            const primaryLoteId = lotesInput[0].loteId;
 
-            if (!lote.activo) {
-                throw new Error(`El lote ${lote.codigo} se encuentra inactivo`);
-            }
-
-            const disponibles = lote.kilosActuales ?? lote.kilosIniciales ?? 0;
-            const kilosAUsar = Number(item.kilosUsados);
-
-            if (kilosAUsar > disponibles) {
-                throw new Error(
-                    `Los kilos ingresados para el lote ${lote.codigo} (${kilosAUsar} kg) superan los disponibles (${disponibles} kg)`
-                );
-            }
-
-            const nuevoSaldoLote = Math.max(0, Number((disponibles - kilosAUsar).toFixed(2)));
-            const nuevoEstadoLote = nuevoSaldoLote === 0 ? "EN_SECADO" : "EN_PROCESO";
-
-            await tx.lote.update({
-                where: { id: lote.id },
+            const secado = await tx.secado.create({
                 data: {
-                    kilosActuales: nuevoSaldoLote,
-                    estado: nuevoEstadoLote,
+                    codigo,
+                    loteId: primaryLoteId,
+                    fechaInicio: new Date(data.fechaInicio),
+                    fechaFin: data.fechaFin ? new Date(data.fechaFin) : null,
+                    kilosIngresados,
+                    kilosResultantes,
+                    merma,
+                    observaciones: data.observaciones || null,
+                    perfilProceso: (data.perfilProceso as any) || null,
+                    secadora,
+                    tempMinima,
+                    tempMaxima,
+                    secadoLotes: {
+                        create: lotesInput.map((l) => ({
+                            loteId: Number(l.loteId),
+                            kilosUsados: Number(l.kilosUsados),
+                        })),
+                    },
                 },
+                include: secadoIncludeDefault,
             });
-        }
 
-        const codigo =
-            data.codigo?.trim() ||
-            (await generarCodigoSecado(data.perfilProceso));
-
-        const primaryLoteId = lotesInput[0].loteId;
-
-        const secado = await tx.secado.create({
-            data: {
-                codigo,
-                loteId: primaryLoteId,
-                fechaInicio: new Date(data.fechaInicio),
-                fechaFin: data.fechaFin ? new Date(data.fechaFin) : null,
-                kilosIngresados,
-                kilosResultantes,
-                merma,
-                observaciones: data.observaciones || null,
-                perfilProceso: (data.perfilProceso as any) || null,
-                secadora,
-                tempMinima,
-                tempMaxima,
-                secadoLotes: {
-                    create: lotesInput.map((l) => ({
-                        loteId: Number(l.loteId),
-                        kilosUsados: Number(l.kilosUsados),
-                    })),
-                },
-            },
-            include: secadoIncludeDefault,
-        });
-
-        return secado;
-    });
+            return secado;
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function actualizarSecado(
@@ -203,9 +252,7 @@ export async function actualizarSecado(
         async (tx) => {
             const secadoExistente =
                 await tx.secado.findUnique({
-                    where: {
-                        id,
-                    },
+                    where: { id }, include: { secadoLotes: true },
                 });
 
             if (!secadoExistente) {
@@ -225,14 +272,9 @@ export async function actualizarSecado(
                     );
 
             const kilosResultantes =
-                data.kilosResultantes !==
-                    undefined
-                    ? Number(
-                        data.kilosResultantes,
-                    )
-                    : Number(
-                        secadoExistente.kilosResultantes,
-                    );
+                data.kilosResultantes === undefined
+                    ? secadoExistente.kilosResultantes
+                    : data.kilosResultantes;
 
             if (
                 !Number.isFinite(
@@ -246,10 +288,8 @@ export async function actualizarSecado(
             }
 
             if (
-                !Number.isFinite(
-                    kilosResultantes,
-                ) ||
-                kilosResultantes < 0
+                kilosResultantes !== null &&
+                (!Number.isFinite(kilosResultantes) || kilosResultantes < 0)
             ) {
                 throw new Error(
                     "Los kilos resultantes no pueden ser negativos",
@@ -257,36 +297,34 @@ export async function actualizarSecado(
             }
 
             if (
-                kilosResultantes >
-                kilosIngresados
+                kilosResultantes !== null && kilosResultantes > kilosIngresados
             ) {
                 throw new Error(
                     "Los kilos resultantes no pueden superar los kilos ingresados",
                 );
             }
 
-            const merma =
-                kilosIngresados -
-                kilosResultantes;
+            if (kilosResultantes !== secadoExistente.kilosResultantes) {
+                const vinculos = await tx.empaque.count({
+                    where: { OR: [{ secadoId: id }, { empaqueSecados: { some: { secadoId: id } } }] },
+                });
+                if (vinculos) throw new Error("El secado ya está vinculado a un ingreso de Almacén Pergamino");
+            }
+            const merma = kilosResultantes === null ? null : kilosIngresados - kilosResultantes;
 
-            const loteIdAnterior =
-                secadoExistente.loteId;
-
-            const loteIdNuevo =
-                data.loteId !== undefined
-                    ? Number(
-                        data.loteId,
-                    )
-                    : loteIdAnterior;
-
-            const kilosOriginales =
-                Number(
-                    secadoExistente.kilosIngresados,
-                );
-
-            const cambioDeLote =
-                loteIdNuevo !==
-                loteIdAnterior;
+            const anteriores = secadoExistente.secadoLotes.length
+                ? secadoExistente.secadoLotes
+                : [{ loteId: secadoExistente.loteId, kilosUsados: secadoExistente.kilosIngresados }];
+            if (!data.lotes && anteriores.length > 1 &&
+                (kilosIngresados !== secadoExistente.kilosIngresados ||
+                    (data.loteId !== undefined && data.loteId !== secadoExistente.loteId))) {
+                throw new Error("Indique todos los aportes al modificar un secado con varios lotes");
+            }
+            const nuevos = data.lotes ?? (anteriores.length === 1
+                ? [{ loteId: data.loteId ?? secadoExistente.loteId, kilosUsados: kilosIngresados }]
+                : anteriores);
+            validarAportes(nuevos, kilosIngresados);
+            const loteIdNuevo = nuevos[0].loteId;
 
             const secadora =
                 data.secadora !==
@@ -369,201 +407,16 @@ export async function actualizarSecado(
                 );
             }
 
-            /*
-             * =====================================================
-             * MISMO LOTE
-             * =====================================================
-             */
-            if (!cambioDeLote) {
-                const lote =
-                    await tx.lote.findUnique({
-                        where: {
-                            id:
-                                loteIdAnterior,
-                        },
-                    });
-
-                if (!lote) {
-                    throw new Error(
-                        "Lote no encontrado",
-                    );
-                }
-
-                const saldoActual =
-                    Number(
-                        lote.kilosActuales ??
-                        lote.kilosIniciales ??
-                        0,
-                    );
-
-                /*
-                 * Los kilos que este mismo secado ya consumió
-                 * se consideran disponibles durante la edición.
-                 */
-                const disponibleEdicion =
-                    saldoActual +
-                    kilosOriginales;
-
-                if (
-                    kilosIngresados >
-                    disponibleEdicion
-                ) {
-                    throw new Error(
-                        `Los kilos ingresados (${kilosIngresados} kg) superan los kilos disponibles para esta edición (${disponibleEdicion} kg)`,
-                    );
-                }
-
-                const nuevoSaldo =
-                    disponibleEdicion -
-                    kilosIngresados;
-
-                await tx.lote.update({
-                    where: {
-                        id:
-                            loteIdAnterior,
-                    },
-
-                    data: {
-                        kilosActuales:
-                            nuevoSaldo,
-
-                        /*
-                         * Mientras exista el proceso,
-                         * el lote continúa en secado.
-                         */
-                        estado:
-                            "EN_SECADO",
-                    },
+            const cambioAportes = anteriores.length !== nuevos.length || nuevos.some((aporte) =>
+                !anteriores.some((anterior) => anterior.loteId === aporte.loteId && anterior.kilosUsados === aporte.kilosUsados),
+            );
+            if (cambioAportes) {
+                const vinculos = await tx.empaque.count({
+                    where: { OR: [{ secadoId: id }, { empaqueSecados: { some: { secadoId: id } } }] },
                 });
+                if (vinculos) throw new Error("El origen del secado ya está vinculado a Almacén Pergamino");
             }
-
-            /*
-             * =====================================================
-             * CAMBIO DE LOTE
-             * =====================================================
-             */
-            else {
-                const loteAnterior =
-                    await tx.lote.findUnique({
-                        where: {
-                            id:
-                                loteIdAnterior,
-                        },
-                    });
-
-                const loteNuevo =
-                    await tx.lote.findUnique({
-                        where: {
-                            id:
-                                loteIdNuevo,
-                        },
-                    });
-
-                if (!loteAnterior) {
-                    throw new Error(
-                        "El lote original no existe",
-                    );
-                }
-
-                if (!loteNuevo) {
-                    throw new Error(
-                        "El nuevo lote seleccionado no existe",
-                    );
-                }
-
-                if (!loteNuevo.activo) {
-                    throw new Error(
-                        "El nuevo lote seleccionado se encuentra inactivo",
-                    );
-                }
-
-                const saldoNuevoLote =
-                    Number(
-                        loteNuevo.kilosActuales ??
-                        loteNuevo.kilosIniciales ??
-                        0,
-                    );
-
-                if (
-                    kilosIngresados >
-                    saldoNuevoLote
-                ) {
-                    throw new Error(
-                        `Los kilos ingresados (${kilosIngresados} kg) superan los kilos disponibles del nuevo lote (${saldoNuevoLote} kg)`,
-                    );
-                }
-
-                /*
-                 * Restauramos al lote anterior los kilos
-                 * consumidos por este secado.
-                 */
-                const saldoAnterior =
-                    Number(
-                        loteAnterior.kilosActuales ??
-                        loteAnterior.kilosIniciales ??
-                        0,
-                    );
-
-                const saldoRestaurado =
-                    saldoAnterior +
-                    kilosOriginales;
-
-                /*
-                 * Revisamos si el lote anterior todavía
-                 * tiene otros procesos de secado.
-                 */
-                const otrosSecadosAnterior =
-                    await tx.secado.count({
-                        where: {
-                            loteId:
-                                loteIdAnterior,
-
-                            id: {
-                                not: id,
-                            },
-                        },
-                    });
-
-                await tx.lote.update({
-                    where: {
-                        id:
-                            loteIdAnterior,
-                    },
-
-                    data: {
-                        kilosActuales:
-                            saldoRestaurado,
-
-                        estado:
-                            otrosSecadosAnterior >
-                                0
-                                ? "EN_SECADO"
-                                : "EN_PROCESO",
-                    },
-                });
-
-                /*
-                 * Descontamos del nuevo lote.
-                 */
-                const nuevoSaldo =
-                    saldoNuevoLote -
-                    kilosIngresados;
-
-                await tx.lote.update({
-                    where: {
-                        id:
-                            loteIdNuevo,
-                    },
-
-                    data: {
-                        kilosActuales:
-                            nuevoSaldo,
-
-                        estado:
-                            "EN_SECADO",
-                    },
-                });
-            }
+            await ajustarAportes(tx, anteriores, nuevos, id);
 
             const secadoActualizado =
                 await tx.secado.update({
@@ -572,8 +425,11 @@ export async function actualizarSecado(
                     },
 
                     data: {
-                        loteId:
-                            loteIdNuevo,
+                        loteId: loteIdNuevo,
+                        secadoLotes: {
+                            deleteMany: {},
+                            create: nuevos.map(({ loteId, kilosUsados }) => ({ loteId, kilosUsados })),
+                        },
 
                         fechaInicio:
                             data.fechaInicio !==
@@ -625,101 +481,27 @@ export async function actualizarSecado(
                         }),
                     },
 
-                    include: {
-                        lote: true,
-                    },
+                    include: secadoIncludeDefault,
                 });
 
             return secadoActualizado;
         },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 }
 
-export async function eliminarSecado(
-    id: number,
-) {
-    return prisma.$transaction(
-        async (tx) => {
-            const secado =
-                await tx.secado.findUnique({
-                    where: {
-                        id,
-                    },
-                });
+export async function eliminarSecado(id: number) {
+    return prisma.$transaction(async (tx) => {
+        const secado = await tx.secado.findUnique({
+            where: { id },
+            include: { secadoLotes: true },
+        });
+        if (!secado) throw new Error("Proceso de secado no encontrado");
 
-            if (!secado) {
-                throw new Error(
-                    "Proceso de secado no encontrado",
-                );
-            }
-
-            const lote =
-                await tx.lote.findUnique({
-                    where: {
-                        id:
-                            secado.loteId,
-                    },
-                });
-
-            if (!lote) {
-                throw new Error(
-                    "Lote asociado no encontrado",
-                );
-            }
-
-            const saldoActual =
-                Number(
-                    lote.kilosActuales ??
-                    lote.kilosIniciales ??
-                    0,
-                );
-
-            const saldoRestaurado =
-                saldoActual +
-                Number(
-                    secado.kilosIngresados,
-                );
-
-            /*
-             * Eliminamos primero el secado.
-             */
-            const secadoEliminado =
-                await tx.secado.delete({
-                    where: {
-                        id,
-                    },
-                });
-
-            /*
-             * Revisamos si el lote todavía tiene
-             * otros procesos de secado.
-             */
-            const otrosSecados =
-                await tx.secado.count({
-                    where: {
-                        loteId:
-                            secado.loteId,
-                    },
-                });
-
-            await tx.lote.update({
-                where: {
-                    id:
-                        secado.loteId,
-                },
-
-                data: {
-                    kilosActuales:
-                        saldoRestaurado,
-
-                    estado:
-                        otrosSecados > 0
-                            ? "EN_SECADO"
-                            : "EN_PROCESO",
-                },
-            });
-
-            return secadoEliminado;
-        },
-    );
+        const aportes = secado.secadoLotes.length ? secado.secadoLotes
+            : [{ loteId: secado.loteId, kilosUsados: secado.kilosIngresados }];
+        const eliminado = await tx.secado.delete({ where: { id } });
+        await ajustarAportes(tx, aportes, [], id);
+        return eliminado;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }

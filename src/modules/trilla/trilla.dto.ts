@@ -5,7 +5,8 @@ export type DescuentoLoteInput = {
 };
 
 export type CrearOrdenTrillaDTO = {
-  loteIds: number[];
+  loteIds?: number[];
+  empaqueId?: number;
   descuentosPorLote?: DescuentoLoteInput[];
   kilosEnviados: number;
   sacosEnviados?: number | null;
@@ -24,6 +25,11 @@ export type CrearOrdenTrillaDTO = {
 };
 
 export type ActualizarOrdenTrillaDTO = {
+  numeroGuiaHayland?: string | null;
+  estadoManual?: "EN_PROCESO" | "TERMINADO" | "DESPACHADO";
+  exportable2?: number | null;
+  exportable3?: number | null;
+  exportable4?: number | null;
   codigoTrilla?: string;
   numeroGuia?: string | null;
   fechaDespacho?: string | Date;

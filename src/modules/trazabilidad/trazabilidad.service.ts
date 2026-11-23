@@ -1,3 +1,4 @@
+// src/modules/trazabilidad/trazabilidad.service.ts
 import { TipoProceso } from "@prisma/client";
 
 import { prisma } from "../../config/prisma";
@@ -16,7 +17,8 @@ type ProcesoInput = {
 
     duracionHoras?: number;
 
-    loteId?: number | null;
+    loteId?: number | null; // Solo compatibilidad anterior
+    lotes?: { loteId: number; kilosUsados: number }[];
     cosechaId?: number | null;
 
     etapa?: string | null;
@@ -27,7 +29,10 @@ type ProcesoInput = {
     | null;
 
     kilosIngresados: number;
-    kilosResultantes: number;
+    kilosResultantes?: number | null;
+    inicioOxidacion?: string | Date | null;
+    finOxidacion?: string | Date | null;
+    tanqueOxidacion?: string | null;
 
     codigo?: string;
 
@@ -66,6 +71,7 @@ type ResumenFiltros = {
  */
 const procesoInclude = {
     cosecha: true,
+    procesoLotes: { include: { lote: true } },
 
     Lote: {
         include: {
@@ -340,6 +346,70 @@ function validarKilos(
     }
 }
 
+/**
+ * Valida el contrato de lotes y calcula la suma por lote.
+ * No modifica los saldos de inventario (comportamiento actual del módulo).
+ */
+function normalizarDistribucionLotes(
+    valores: { loteId: number; kilosUsados: number }[],
+): { loteId: number; kilosUsados: number }[] {
+    if (!Array.isArray(valores) || valores.length === 0) {
+        throw new Error("Seleccione al menos un lote de origen");
+    }
+    const vistos = new Set<number>();
+    return valores.map((item, index) => {
+        const loteId = Number(item?.loteId);
+        const kilosUsados = Number(item?.kilosUsados);
+        if (!Number.isSafeInteger(loteId) || loteId <= 0) {
+            throw new Error(`Lote inválido en la posición ${index + 1}`);
+        }
+        if (vistos.has(loteId)) {
+            throw new Error(`El lote ${loteId} está duplicado`);
+        }
+        if (!Number.isFinite(kilosUsados) || kilosUsados <= 0) {
+            throw new Error(`Los kilos del lote ${loteId} deben ser mayores que cero`);
+        }
+        vistos.add(loteId);
+        return { loteId, kilosUsados };
+    });
+}
+
+function sumaDistribucion(
+    distribucion: { loteId: number; kilosUsados: number }[],
+): number {
+    return Math.round(distribucion.reduce((suma, r) => suma + r.kilosUsados, 0) * 100) / 100;
+}
+
+async function validarDistribucionContraLotes(
+    distribucion: { loteId: number; kilosUsados: number }[],
+    conservarInactivos: Set<number> = new Set(),
+) {
+    const registros = await prisma.lote.findMany({
+        where: { id: { in: distribucion.map((x) => x.loteId) } },
+        select: {
+            id: true,
+            codigo: true,
+            activo: true,
+            kilosActuales: true,
+            kilosIniciales: true,
+        },
+    });
+    const porId = new Map(registros.map((r) => [r.id, r]));
+    for (const item of distribucion) {
+        const lote = porId.get(item.loteId);
+        if (!lote) throw new Error(`No existe el lote ${item.loteId}`);
+        if (!lote.activo && !conservarInactivos.has(lote.id)) {
+            throw new Error(`El lote ${lote.codigo} se encuentra inactivo`);
+        }
+        const disponible = lote.kilosActuales ?? lote.kilosIniciales;
+        // Los procesos actualmente no descuentan kilosActuales: no se añade
+        // el consumo anterior del proceso durante la edición.
+        if (disponible != null && item.kilosUsados > disponible + 0.00001) {
+            throw new Error(`El lote ${lote.codigo} solo tiene ${disponible} kg disponibles`);
+        }
+    }
+}
+
 export async function listarProcesos() {
     return prisma.procesoTrazabilidad.findMany({
         include:
@@ -351,6 +421,24 @@ export async function listarProcesos() {
     });
 }
 
+function prepararOxidacion(
+    data: Pick<ProcesoInput, "inicioOxidacion" | "finOxidacion" | "tanqueOxidacion">,
+    anterior?: { inicioOxidacion: Date | null; finOxidacion: Date | null; tanqueOxidacion: string | null },
+) {
+    const inicioOxidacion = data.inicioOxidacion === undefined ? anterior?.inicioOxidacion ?? null
+        : parseFechaOpcional(data.inicioOxidacion, "Inicio de oxidación");
+    const finOxidacion = data.finOxidacion === undefined ? anterior?.finOxidacion ?? null
+        : parseFechaOpcional(data.finOxidacion, "Fin de oxidación");
+    if (finOxidacion && (!inicioOxidacion || finOxidacion <= inicioOxidacion)) {
+        throw new Error("El fin de oxidación debe ser posterior al inicio");
+    }
+    return {
+        inicioOxidacion, finOxidacion,
+        tanqueOxidacion: data.tanqueOxidacion === undefined ? anterior?.tanqueOxidacion ?? null
+            : data.tanqueOxidacion?.trim() || null,
+    };
+}
+
 export async function crearProceso(
     data: ProcesoInput,
 ) {
@@ -359,10 +447,8 @@ export async function crearProceso(
             data.kilosIngresados,
         );
 
-    const kilosResultantes =
-        Number(
-            data.kilosResultantes,
-        );
+    const kilosResultantes = data.kilosResultantes == null ? null : Number(data.kilosResultantes);
+    const oxidacion = prepararOxidacion(data);
 
     validarKilos(
         kilosIngresados,
@@ -477,64 +563,25 @@ export async function crearProceso(
             )
             : null;
 
-    const loteIdFinal =
-        data.loteId !==
-            undefined &&
-            data.loteId !== null
-            ? Number(
-                data.loteId,
-            )
-            : null;
-
-    if (
-        loteIdFinal !== null
-    ) {
-        const lote =
-            await prisma.lote.findUnique({
-                where: {
-                    id: loteIdFinal,
-                },
-
-                include: {
-                    cosechaLotes: {
-                        include: {
-                            cosecha: true,
-                        },
-                    },
-                },
-            });
-
-        if (!lote) {
-            throw new Error(
-                "El lote seleccionado no existe",
-            );
-        }
-
-        if (!lote.activo) {
-            throw new Error(
-                "El lote seleccionado se encuentra inactivo",
-            );
-        }
-
-        const kilosDisponibles =
-            lote.kilosActuales ??
-            lote.kilosIniciales;
-
-        if (
-            kilosDisponibles !==
-            null &&
-            kilosDisponibles !==
-            undefined &&
-            kilosIngresados >
-            kilosDisponibles
-        ) {
-            throw new Error(
-                `Los kilos ingresados no pueden superar los kilos disponibles del lote (${kilosDisponibles} kg)`,
-            );
-        }
-
-        // cosechaId es completamente opcional: el proceso trazabilidad se vincula directamente al Lote de Proceso.
+    // Se acepta el contrato moderno `lotes` y el antiguo `loteId`.
+    if (data.lotes !== undefined && data.loteId != null) {
+        throw new Error("Envíe 'lotes' o 'loteId', pero no ambos");
     }
+    const distribucion = normalizarDistribucionLotes(
+        data.lotes !== undefined
+            ? data.lotes
+            : data.loteId != null
+                ? [{ loteId: data.loteId, kilosUsados: kilosIngresados }]
+                : [],
+    );
+    const suma = sumaDistribucion(distribucion);
+    if (Math.abs(suma - kilosIngresados) > 0.01) {
+        throw new Error("kilosIngresados no coincide con la suma de lotes[].kilosUsados");
+    }
+    await validarDistribucionContraLotes(distribucion);
+    // Para procesos nuevos manda la tabla intermedia; se mantiene nulo el
+    // campo legado que solo identifica un lote, para no generar ambigüedad.
+    const loteIdFinal: number | null = distribucion.length === 1 ? distribucion[0].loteId : null;
 
     return prisma.$transaction(
         async (tx) => {
@@ -606,6 +653,7 @@ export async function crearProceso(
                 fechaInicio,
                 fechaFin,
                 duracionHoras,
+                ...oxidacion,
                 etapa: data.etapa?.trim() || null,
                 tipoProceso,
                 kilosIngresados,
@@ -614,6 +662,7 @@ export async function crearProceso(
                         ? Number(data.kilosResultantes)
                         : null,
                 loteId: loteIdFinal,
+                procesoLotes: { create: distribucion.map(({ loteId, kilosUsados }) => ({ loteId, kilosUsados })) },
                 cosechaId: cosechaIdFinal,
                 gradosBrix:
                     data.gradosBrix !== undefined && data.gradosBrix !== null
@@ -657,13 +706,10 @@ export async function actualizarProceso(
     data: Partial<ProcesoInput>,
 ) {
     const procesoActual =
-        await prisma.procesoTrazabilidad.findUnique(
-            {
-                where: {
-                    id,
-                },
-            },
-        );
+        await prisma.procesoTrazabilidad.findUnique({
+            where: { id },
+            include: { procesoLotes: true },
+        });
 
     if (!procesoActual) {
         throw new Error(
@@ -675,21 +721,54 @@ export async function actualizarProceso(
      * Se calculan los valores finales porque modificar kilosIngresados
      * también puede volver inválido el kilosResultantes que ya existía.
      */
-    const kilosIngresadosFinal =
-        data.kilosIngresados !==
-            undefined
-            ? Number(
-                data.kilosIngresados,
-            )
+    const cambiandoLotes = data.lotes !== undefined || data.loteId !== undefined;
+    if (data.lotes !== undefined && data.loteId != null) {
+        throw new Error("Envíe 'lotes' o 'loteId', pero no ambos");
+    }
+    const distribucion = cambiandoLotes
+        ? normalizarDistribucionLotes(
+            data.lotes !== undefined
+                ? data.lotes
+                : data.loteId != null
+                    ? [{
+                        loteId: data.loteId,
+                        kilosUsados: Number(data.kilosIngresados ?? procesoActual.kilosIngresados),
+                    }]
+                    : [],
+          )
+        : undefined;
+
+    const kilosIngresadosFinal = distribucion
+        ? sumaDistribucion(distribucion)
+        : data.kilosIngresados !== undefined
+            ? Number(data.kilosIngresados)
             : procesoActual.kilosIngresados;
 
-    const kilosResultantesFinal =
-        data.kilosResultantes !==
-            undefined
-            ? Number(
-                data.kilosResultantes,
-            )
-            : procesoActual.kilosResultantes;
+    if (distribucion) {
+        if (data.kilosIngresados !== undefined &&
+            Math.abs(Number(data.kilosIngresados) - kilosIngresadosFinal) > 0.01) {
+            throw new Error("kilosIngresados no coincide con la suma de lotes[].kilosUsados");
+        }
+        const idsConservados = new Set(procesoActual.procesoLotes.map((x) => x.loteId));
+        if (procesoActual.loteId != null) idsConservados.add(procesoActual.loteId);
+        await validarDistribucionContraLotes(distribucion, idsConservados);
+    } else if (data.kilosIngresados !== undefined && procesoActual.procesoLotes.length) {
+        const sumaActual = sumaDistribucion(procesoActual.procesoLotes);
+        if (Math.abs(sumaActual - kilosIngresadosFinal) > 0.01) {
+            throw new Error("Para modificar kilosIngresados debe enviar la distribución 'lotes'");
+        }
+    } else if (data.kilosIngresados !== undefined && procesoActual.loteId != null) {
+        await validarDistribucionContraLotes(
+            [{ loteId: procesoActual.loteId, kilosUsados: kilosIngresadosFinal }],
+            new Set([procesoActual.loteId]),
+        );
+    }
+
+    const kilosResultantesFinal = data.kilosResultantes !== undefined
+        ? data.kilosResultantes === null
+            ? null
+            : Number(data.kilosResultantes)
+        : procesoActual.kilosResultantes;
 
     validarKilos(
         Number(
@@ -899,72 +978,11 @@ export async function actualizarProceso(
             )
             : undefined;
 
-    const loteIdFinal =
-        data.loteId !== undefined
-            ? data.loteId !== null
-                ? Number(
-                    data.loteId,
-                )
-                : null
-            : procesoActual.loteId;
-
-    /*
-     * Se vuelve a validar el lote cuando cambia el lote o la cantidad
-     * ingresada. Esto impide actualizar el proceso con un lote inexistente.
-     */
-    if (
-        loteIdFinal !== null &&
-        (
-            data.loteId !==
-            undefined ||
-            data.kilosIngresados !==
-            undefined
-        )
-    ) {
-        const lote =
-            await prisma.lote.findUnique({
-                where: {
-                    id: loteIdFinal,
-                },
-            });
-
-        if (!lote) {
-            throw new Error(
-                "El lote seleccionado no existe",
-            );
-        }
-
-        /*
-         * Se permite conservar el lote original si fue desactivado después
-         * de registrar el proceso, pero no seleccionar otro lote inactivo.
-         */
-        if (
-            !lote.activo &&
-            lote.id !==
-            procesoActual.loteId
-        ) {
-            throw new Error(
-                "El lote seleccionado se encuentra inactivo",
-            );
-        }
-
-        const kilosDisponibles =
-            lote.kilosActuales ??
-            lote.kilosIniciales;
-
-        if (
-            kilosDisponibles !==
-            null &&
-            kilosDisponibles !==
-            undefined &&
-            kilosIngresadosFinal >
-            kilosDisponibles
-        ) {
-            throw new Error(
-                `Los kilos ingresados no pueden superar los kilos disponibles del lote (${kilosDisponibles} kg)`,
-            );
-        }
-    }
+    // Si la edición suministra lotes, se reemplaza la relación legada.
+    // Sin cambio de lotes, se conserva todo el historial existente.
+    const loteIdFinal = distribucion
+        ? distribucion.length === 1 ? distribucion[0].loteId : null
+        : procesoActual.loteId;
 
     return prisma.procesoTrazabilidad.update({
         where: {
@@ -977,10 +995,15 @@ export async function actualizarProceso(
                 fecha,
             }),
 
-            ...(data.loteId !==
-                undefined && {
-                loteId:
-                    loteIdFinal,
+            ...(cambiandoLotes && {
+                loteId: loteIdFinal,
+                procesoLotes: {
+                    deleteMany: {},
+                    create: (distribucion ?? []).map(({ loteId, kilosUsados }) => ({
+                        loteId,
+                        kilosUsados,
+                    })),
+                },
             }),
 
             ...(data.cosechaId !==
@@ -994,6 +1017,7 @@ export async function actualizarProceso(
                         : null,
             }),
 
+            ...prepararOxidacion(data, procesoActual),
             ...(data.etapa !==
                 undefined && {
                 etapa:
@@ -1006,10 +1030,8 @@ export async function actualizarProceso(
                 tipoProceso,
             }),
 
-            ...(data.kilosIngresados !==
-                undefined && {
-                kilosIngresados:
-                    kilosIngresadosFinal,
+            ...((data.kilosIngresados !== undefined || cambiandoLotes) && {
+                kilosIngresados: kilosIngresadosFinal,
             }),
             ...(data.kilosResultantes !== undefined && {
                 kilosResultantes:

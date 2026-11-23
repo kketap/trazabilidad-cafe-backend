@@ -4,7 +4,8 @@ import { prisma } from "../../config/prisma";
 export type CreateTrabajadorInput = {
   nombres: string;
   apellidos?: string | null;
-  dni: string;
+  dni?: string | null;
+  codigoInterno?: string | null;
   rol?: string | null;
   telefono?: string | null;
   activo?: boolean;
@@ -39,7 +40,8 @@ export async function crearTrabajador(input: CreateTrabajadorInput) {
     data: {
       nombres: input.nombres.trim(),
       apellidos: input.apellidos?.trim() || null,
-      dni: input.dni.trim(),
+      dni: input.dni?.trim() || null,
+      codigoInterno: input.codigoInterno?.trim() || null,
       rol: input.rol?.trim() || null,
       telefono: input.telefono?.trim() || null,
       activo: input.activo ?? true,
@@ -61,7 +63,10 @@ export async function actualizarTrabajador(
         apellidos: input.apellidos?.trim() || null,
       }),
       ...(input.dni !== undefined && {
-        dni: input.dni.trim(),
+        dni: input.dni?.trim() || null,
+      }),
+      ...(input.codigoInterno !== undefined && {
+        codigoInterno: input.codigoInterno?.trim() || null,
       }),
       ...(input.rol !== undefined && {
         rol: input.rol?.trim() || null,

@@ -206,3 +206,25 @@ git push -u origin feature/schema-cosecha-trazabilidad
 * Usar `.env.example` como plantilla.
 * En producción, las variables se configuran desde Railway.
 * Cada cambio en `main` puede activar un nuevo deploy automático en Railway.
+
+## Migraciones y verificación de inventario
+
+Una base PostgreSQL vacía puede inicializarse con `npm run prisma:deploy`.
+La migración `202611180000_esquema_base` reproduce el esquema local anterior
+al pesaje pendiente y a los nuevos campos de Trilla.
+
+Para una base existente, comprobar primero en una copia que su estructura
+coincida con esa migración. Si coincide y la base aún no tiene historial de
+Prisma Migrate, registrar la base con
+`npx prisma migrate resolve --applied 202611180000_esquema_base` y aplicar las
+migraciones siguientes sobre la copia antes de actualizar el entorno activo.
+Las órdenes históricas sin vínculo a un registro de almacén requieren
+conciliación antes de usar el saldo calculado de esos registros.
+
+Secado consume de los lotes originales. Un ingreso a Almacén Pergamino
+vinculado a secados toma todo su peso seco registrado. Un envío a Trilla
+puede consumir parte del saldo de un registro de almacén. El saldo se
+compromete al crear la orden y es independiente del cambio manual de estado.
+
+Ejecutar `npm test -- --runInBand` para verificar la validación de pesos y
+el descuento, la edición y la devolución multilote con Prisma simulado.

@@ -84,6 +84,7 @@ model Lote {
   ProcesoTrazabilidad ProcesoTrazabilidad[]
   secados             Secado[]
   secadoLotes         SecadoLote[]
+  procesoLotes        ProcesoLote[]
 }
 
 model CosechaLote {
@@ -123,15 +124,15 @@ model RefreshToken {
 }
 
 model ProcesoTrazabilidad {
-  id                 Int          @id @default(autoincrement())
+  id                 Int           @id @default(autoincrement())
   fecha              DateTime
   etapa              String?
   kilosIngresados    Float
   cosechaId          Int?
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
   loteId             Int?
-  codigo             String       @unique
+  codigo             String        @unique
   duracionHoras      Float
   fechaInicio        DateTime?
   fechaFin           DateTime?
@@ -141,19 +142,24 @@ model ProcesoTrazabilidad {
   fueLavado          Boolean?
   gradosBrix         Float?
   inicioFermentacion DateTime?
+  inicioOxidacion    DateTime?
+  finOxidacion       DateTime?
+  tanqueOxidacion    String?
   nivelPh            Float?
   tanqueFermentacion String?
   tempMaxima         Float?
   tempMinima         Float?
   kilosResultantes   Float?
-  cosecha            Cosecha?     @relation(fields: [cosechaId], references: [id])
-  Lote               Lote?        @relation(fields: [loteId], references: [id])
+  cosecha            Cosecha?      @relation(fields: [cosechaId], references: [id])
+  Lote               Lote?         @relation(fields: [loteId], references: [id])
+  procesoLotes       ProcesoLote[]
 }
 
 model Trabajador {
   id                Int                 @id @default(autoincrement())
   nombres           String
-  dni               String              @unique
+  dni               String?             @unique
+  codigoInterno     String?             @unique
   rol               String?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
@@ -161,6 +167,21 @@ model Trabajador {
   apellidos         String?
   telefono          String?
   CosechaTrabajador CosechaTrabajador[]
+}
+
+model ProcesoLote {
+  id          Int      @id @default(autoincrement())
+  procesoId   Int
+  loteId      Int
+  kilosUsados Float
+  createdAt   DateTime @default(now())
+
+  proceso ProcesoTrazabilidad @relation(fields: [procesoId], references: [id], onDelete: Cascade)
+
+  lote Lote @relation(fields: [loteId], references: [id])
+
+  @@unique([procesoId, loteId])
+  @@index([loteId])
 }
 
 model Cliente {
@@ -195,8 +216,8 @@ model Secado {
   fechaInicio      DateTime
   fechaFin         DateTime?
   kilosIngresados  Float
-  kilosResultantes Float
-  merma            Float
+  kilosResultantes Float?
+  merma            Float?
   observaciones    String?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
@@ -247,6 +268,7 @@ model Empaque {
   lote             Lote            @relation(fields: [loteId], references: [id])
   secado           Secado?         @relation(fields: [secadoId], references: [id])
   empaqueSecados   EmpaqueSecado[]
+  ordenesTrilla    OrdenTrilla[]
 }
 
 model EmpaqueSecado {
@@ -278,6 +300,11 @@ model OrdenTrilla {
   exportable      Float?
   malla13         Float?
   numeroGuia      String?
+  numeroGuiaHayland String?
+  estadoManual    EstadoOrdenTrilla?
+  exportable2     Float?
+  exportable3     Float?
+  exportable4     Float?
   recuperado      Float?
   segundaBuena    Float?
   segundaMala     Float?
@@ -285,7 +312,11 @@ model OrdenTrilla {
   sacosEnviados   Int?
   lotes           Lote[]
   ordenLotes      OrdenTrillaLote[]
+  empaqueId       Int?
+  empaque         Empaque?          @relation(fields: [empaqueId], references: [id], onDelete: Restrict)
   ventas          Venta[]
+
+  @@index([empaqueId])
 }
 
 model OrdenTrillaLote {
@@ -316,6 +347,12 @@ model Venta {
   ordenTrillaId      String
   cliente            Cliente     @relation(fields: [clienteId], references: [id])
   ordenTrilla        OrdenTrilla @relation(fields: [ordenTrillaId], references: [id])
+}
+
+enum EstadoOrdenTrilla {
+  EN_PROCESO
+  TERMINADO
+  DESPACHADO
 }
 
 enum EstadoLote {

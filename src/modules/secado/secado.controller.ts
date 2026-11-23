@@ -43,6 +43,7 @@ export async function createSecado(req: Request, res: Response) {
     try {
         const {
             loteId,
+            lotes,
             fechaInicio,
             fechaFin,
             kilosIngresados,
@@ -55,25 +56,25 @@ export async function createSecado(req: Request, res: Response) {
         } = req.body;
 
         if (
-            !loteId ||
+            (!loteId && !Array.isArray(lotes)) ||
             !fechaInicio ||
-            kilosIngresados === undefined ||
-            kilosResultantes === undefined
+            kilosIngresados === undefined
         ) {
             res.status(400).json({
                 ok: false,
                 message:
-                    "Los campos 'loteId', 'fechaInicio', 'kilosIngresados' y 'kilosResultantes' son obligatorios",
+                    "Los campos 'loteId', 'fechaInicio' y 'kilosIngresados' son obligatorios",
             });
             return;
         }
 
         const secado = await crearSecado({
-            loteId: Number(loteId),
+            loteId: loteId == null ? undefined : Number(loteId),
+            ...(lotes !== undefined && { lotes }),
             fechaInicio: String(fechaInicio),
             fechaFin: fechaFin ? String(fechaFin) : null,
             kilosIngresados: Number(kilosIngresados),
-            kilosResultantes: Number(kilosResultantes),
+            kilosResultantes: kilosResultantes == null ? null : Number(kilosResultantes),
             observaciones: observaciones || null,
             perfilProceso: perfilProceso || null,
             secadora:
@@ -110,6 +111,7 @@ export async function updateSecado(req: Request, res: Response) {
 
         const {
             loteId,
+            lotes,
             fechaInicio,
             fechaFin,
             kilosIngresados,
@@ -123,13 +125,14 @@ export async function updateSecado(req: Request, res: Response) {
 
         const secado = await actualizarSecado(id, {
             ...(loteId !== undefined && { loteId: Number(loteId) }),
+            ...(lotes !== undefined && { lotes }),
             ...(fechaInicio !== undefined && { fechaInicio }),
             ...(fechaFin !== undefined && { fechaFin }),
             ...(kilosIngresados !== undefined && {
                 kilosIngresados: Number(kilosIngresados),
             }),
             ...(kilosResultantes !== undefined && {
-                kilosResultantes: Number(kilosResultantes),
+                kilosResultantes: kilosResultantes == null ? null : Number(kilosResultantes),
             }),
             ...(observaciones !== undefined && { observaciones }),
             ...(perfilProceso !== undefined && { perfilProceso }),

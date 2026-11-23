@@ -2,6 +2,7 @@
 import type { Request, Response } from "express";
 import type { TipoCodigoLote } from "@prisma/client";
 import {
+  ErrorValidacionLote,
   actualizarLote,
   crearLote,
   eliminarLote,
@@ -113,10 +114,11 @@ export async function createLote(req: Request, res: Response) {
       return;
     }
 
-    res.status(400).json({
-      ok: false,
-      message: error.message || "Error creando lote",
-    });
+    if (error instanceof ErrorValidacionLote) {
+      res.status(400).json({ ok: false, message: error.message });
+      return;
+    }
+    res.status(500).json({ ok: false, message: "No pudimos crear el lote. Intenta nuevamente." });
   }
 }
 
@@ -149,10 +151,11 @@ export async function updateLote(req: Request, res: Response) {
       return;
     }
 
-    res.status(400).json({
-      ok: false,
-      message: error.message || "Error actualizando lote",
-    });
+    if (error.code === "P2025") {
+      res.status(404).json({ ok: false, message: "Este lote ya no está disponible. Actualiza la lista antes de continuar." });
+      return;
+    }
+    res.status(500).json({ ok: false, message: "No pudimos guardar los cambios del lote. Intenta nuevamente." });
   }
 }
 
@@ -168,18 +171,28 @@ export async function deleteLote(req: Request, res: Response) {
       return;
     }
 
-    await eliminarLote(id);
-
+    const resultado = await eliminarLote(id);
     res.json({
       ok: true,
-      message: "Lote eliminado o desactivado correctamente",
+      message: resultado === "desactivado"
+        ? "Lote desactivado. Se conservaron sus registros asociados."
+        : "Lote eliminado correctamente.",
     });
   } catch (error: any) {
+    if (error.code === "P2025") {
+      res.status(404).json({ ok: false, message: "Lote no encontrado" });
+      return;
+    }
+    if (error.code === "P2003" || /ProcesoLote_loteId_fkey|violates RESTRICT/i.test(error.message ?? "")) {
+      console.error("No se pudo eliminar un lote con registros asociados:", error);
+      res.status(409).json({ ok: false, message: "Este lote está asociado a otros registros. Actualiza la lista y verifica su historial antes de volver a intentar." });
+      return;
+    }
+    if (error.code === "P2034") {
+      res.status(409).json({ ok: false, message: "El lote cambió mientras se procesaba la solicitud. Intenta nuevamente." });
+      return;
+    }
     console.error("Error eliminando lote:", error);
-
-    res.status(400).json({
-      ok: false,
-      message: error.message || "Error eliminando lote",
-    });
+    res.status(500).json({ ok: false, message: "No pudimos completar la operación. Actualiza la lista de lotes e intenta nuevamente." });
   }
 }

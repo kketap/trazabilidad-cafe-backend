@@ -1,5 +1,6 @@
 // src/modules/trilla/trilla.service.ts
 import { randomUUID } from "crypto";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import type { CrearOrdenTrillaDTO, ActualizarOrdenTrillaDTO } from "./trilla.dto";
 
@@ -24,7 +25,8 @@ const ordenTrillaIncludeDefault = {
 
 export function enriquecerOrdenTrilla(o: any) {
   const baseKilos = Number(o.kilosNetos ?? o.kilosEnviados ?? 0);
-  const exp = Number(o.exportable ?? 0);
+  const exp = [o.exportable, o.exportable2, o.exportable3, o.exportable4]
+    .reduce((total, kilos) => total + Number(kilos ?? 0), 0);
   const rec = Number(o.recuperado ?? 0);
 
   const pctExportable = baseKilos > 0 ? Number(((exp / baseKilos) * 100).toFixed(2)) : 0;
@@ -87,7 +89,7 @@ export async function crearOrdenTrilla(data: CrearOrdenTrillaDTO) {
     ? data.loteIds.map((id) => Number(id)).filter((id) => !Number.isNaN(id))
     : [];
 
-  if (loteIds.length === 0) {
+  if (data.empaqueId === undefined && loteIds.length === 0) {
     throw new Error("Debe seleccionar al menos un lote de origen válido");
   }
 
@@ -113,6 +115,55 @@ export async function crearOrdenTrilla(data: CrearOrdenTrillaDTO) {
     Array.isArray(data.descuentosPorLote) && data.descuentosPorLote.length > 0;
 
   return prisma.$transaction(async (tx) => {
+    if (data.empaqueId !== undefined) {
+      if (!Number.isSafeInteger(data.empaqueId) || data.empaqueId <= 0) {
+        throw new Error("Seleccione un registro válido de Almacén Pergamino");
+      }
+      const empaque = await tx.empaque.findUnique({
+        where: { id: data.empaqueId },
+        include: {
+          ordenesTrilla: { select: { kilosEnviados: true } },
+          secado: { include: { secadoLotes: true } },
+          empaqueSecados: { include: { secado: { include: { secadoLotes: true } } } },
+        },
+      });
+      if (!empaque) throw new Error("No se encontró el registro de Almacén Pergamino");
+      const usados = empaque.ordenesTrilla.reduce((total, orden) => total + orden.kilosEnviados, 0);
+      const disponibles = Number((empaque.kilosResultantes - usados).toFixed(2));
+      if (kilosEnviados > disponibles) {
+        throw new Error(`El registro de Almacén Pergamino tiene ${disponibles} kg disponibles`);
+      }
+      const secados = empaque.empaqueSecados.length
+        ? empaque.empaqueSecados.map(({ secado }) => secado)
+        : empaque.secado ? [empaque.secado] : [];
+      const origenes = secados.flatMap((secado) =>
+        secado.secadoLotes.length ? secado.secadoLotes.map(({ loteId }) => loteId) : [secado.loteId],
+      );
+      const ids = [...new Set(origenes.length ? origenes : [empaque.loteId])];
+      const orden = await tx.ordenTrilla.create({
+        data: {
+          empaqueId: empaque.id,
+          codigoTrilla,
+          numeroGuia,
+          kilosEnviados,
+          fechaDespacho: data.fechaDespacho ? new Date(data.fechaDespacho) : new Date(),
+          sacosEnviados: data.sacosEnviados ?? null,
+          estadoManual: "EN_PROCESO",
+          exportable,
+          recuperado,
+          malla13,
+          segundaBuena,
+          segundaMala,
+          sucioEscojo,
+          cisco,
+          descarteMaquina,
+          cascarilla,
+          lotes: { connect: ids.map((id) => ({ id })) },
+        },
+        include: ordenTrillaIncludeDefault,
+      });
+      return enriquecerOrdenTrilla(orden);
+    }
     // 1. Obtener y validar lotes de origen
     const lotes = await tx.lote.findMany({
       where: {
@@ -238,7 +289,7 @@ export async function crearOrdenTrilla(data: CrearOrdenTrillaDTO) {
     });
 
     return enriquecerOrdenTrilla(ordenCompleta);
-  });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 export async function actualizarOrdenTrilla(id: string, data: ActualizarOrdenTrillaDTO) {
@@ -250,7 +301,26 @@ export async function actualizarOrdenTrilla(id: string, data: ActualizarOrdenTri
     throw new Error("Orden de trilla no encontrada");
   }
 
+  if (ordenExistente.empaqueId != null &&
+      ((data.kilosEnviados !== undefined && data.kilosEnviados !== ordenExistente.kilosEnviados) || data.loteIds !== undefined)) {
+    throw new Error("Los kilos enviados y lotes de una orden vinculada se definen al crearla");
+  }
   const updateData: any = {};
+
+  if (data.estadoManual !== undefined) {
+    if (!["EN_PROCESO", "TERMINADO", "DESPACHADO"].includes(data.estadoManual)) {
+      throw new Error("Estado de trilla inválido");
+    }
+    updateData.estadoManual = data.estadoManual;
+  }
+  if (data.numeroGuiaHayland !== undefined) {
+    updateData.numeroGuiaHayland = String(data.numeroGuiaHayland ?? "").trim() || null;
+  }
+  for (const campo of ["exportable", "exportable2", "exportable3", "exportable4"] as const) {
+    const kilos = parseOptionalNumber(data[campo], campo);
+    if (kilos != null && kilos < 0) throw new Error("Los kilos exportables no pueden ser negativos");
+    if (kilos !== undefined) updateData[campo] = kilos;
+  }
 
   if (data.codigoTrilla !== undefined) {
     updateData.codigoTrilla = data.codigoTrilla.trim();
@@ -282,9 +352,6 @@ export async function actualizarOrdenTrilla(id: string, data: ActualizarOrdenTri
   }
   if (data.kilosNetos !== undefined) {
     updateData.kilosNetos = parseOptionalNumber(data.kilosNetos, "kilosNetos");
-  }
-  if (data.exportable !== undefined) {
-    updateData.exportable = parseOptionalNumber(data.exportable, "exportable");
   }
   if (data.recuperado !== undefined) {
     updateData.recuperado = parseOptionalNumber(data.recuperado, "recuperado");

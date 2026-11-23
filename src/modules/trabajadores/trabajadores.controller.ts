@@ -33,12 +33,16 @@ export async function getTrabajadorById(req: Request, res: Response) {
 
 export async function createTrabajador(req: Request, res: Response) {
   try {
-    const { nombres, apellidos, dni, rol, telefono, activo } = req.body;
+    const { nombres, apellidos, dni, codigoInterno, rol, telefono, activo } = req.body;
+    if (dni != null && typeof dni !== "string") {
+      res.status(400).json({ ok: false, message: "Ingrese el DNI como texto" });
+      return;
+    }
 
-    if (!nombres || !dni) {
+    if (typeof nombres !== "string" || !nombres.trim()) {
       res.status(400).json({
         ok: false,
-        message: "Los campos 'nombres' y 'dni' son requeridos",
+        message: "Ingrese el nombre del trabajador",
       });
       return;
     }
@@ -47,6 +51,7 @@ export async function createTrabajador(req: Request, res: Response) {
       nombres,
       apellidos,
       dni,
+      codigoInterno,
       rol,
       telefono,
       activo,
@@ -54,7 +59,8 @@ export async function createTrabajador(req: Request, res: Response) {
     res.status(201).json({ ok: true, data: nuevoTrabajador });
   } catch (error: any) {
     if (error.code === "P2002") {
-      res.status(400).json({ ok: false, message: "El DNI ingresado ya existe" });
+      const campo = error.meta?.target?.includes("codigoInterno") ? "código interno" : "DNI";
+      res.status(400).json({ ok: false, message: `El ${campo} ingresado ya existe` });
       return;
     }
     res.status(500).json({ ok: false, message: error.message || "Error al crear trabajador" });
@@ -69,12 +75,17 @@ export async function updateTrabajador(req: Request, res: Response) {
       return;
     }
 
-    const { nombres, apellidos, dni, rol, telefono, activo } = req.body;
+    const { nombres, apellidos, dni, codigoInterno, rol, telefono, activo } = req.body;
+    if (dni != null && typeof dni !== "string") {
+      res.status(400).json({ ok: false, message: "Ingrese el DNI como texto" });
+      return;
+    }
 
     const trabajadorActualizado = await trabajadoresService.actualizarTrabajador(id, {
       nombres,
       apellidos,
       dni,
+      codigoInterno,
       rol,
       telefono,
       activo,
@@ -82,7 +93,8 @@ export async function updateTrabajador(req: Request, res: Response) {
     res.json({ ok: true, data: trabajadorActualizado });
   } catch (error: any) {
     if (error.code === "P2002") {
-      res.status(400).json({ ok: false, message: "El DNI ingresado ya existe" });
+      const campo = error.meta?.target?.includes("codigoInterno") ? "código interno" : "DNI";
+      res.status(400).json({ ok: false, message: `El ${campo} ingresado ya existe` });
       return;
     }
     res.status(500).json({ ok: false, message: error.message || "Error al actualizar trabajador" });
