@@ -1,5 +1,6 @@
 // src/modules/empaque/empaque.service.ts
 import { Prisma } from "@prisma/client";
+import { saldoNetoTrilla } from "./saldo-empaque";
 import { prisma } from "../../config/prisma";
 
 export type EmpaqueInput = {
@@ -20,12 +21,15 @@ export type EmpaqueInput = {
     puntajeSca?: number | null;
     perfilSensorial?: string | null;
     fueCatado?: boolean | null;
+    muestra?: boolean | null;
+    perfilSecado?: string | null;
 };
 
 const empaqueIncludeDefault = {
     lote: true,
     secado: { include: { secadoLotes: { include: { lote: true } } } },
     ordenesTrilla: { select: { kilosEnviados: true } },
+    enviosTrilla: { select: { kilosNetos: true } },
     empaqueSecados: {
         include: {
             secado: { include: { secadoLotes: { include: { lote: true } } } },
@@ -57,33 +61,53 @@ async function generarCodigoEmpaque(): Promise<string> {
     return `EMP-${String(siguiente).padStart(3, "0")}`;
 }
 
+function conSaldoAlmacen<T extends Prisma.EmpaqueGetPayload<{ include: typeof empaqueIncludeDefault }>>(registro: T) {
+    const saldoTrilla = saldoNetoTrilla(registro);
+    const estado = saldoTrilla > 0 ? "EN_ALMACEN"
+        : registro.ordenesTrilla.length || registro.enviosTrilla.length ? "EN_TRILLA" : "EN_PROCESO";
+    return { ...registro, saldoTrilla, estado };
+}
+
 export async function listarEmpaques() {
-    return prisma.empaque.findMany({
+    const registros = await prisma.empaque.findMany({
         include: empaqueIncludeDefault,
         orderBy: {
             id: "desc",
         },
     });
+    return registros.map(conSaldoAlmacen);
 }
 
 export async function obtenerEmpaquePorId(id: number) {
-    return prisma.empaque.findUnique({
+    const registro = await prisma.empaque.findUnique({
         where: { id },
         include: empaqueIncludeDefault,
     });
+    return registro ? conSaldoAlmacen(registro) : null;
 }
 
-async function obtenerPesoSeco(
+async function validarSecados(
     tx: Prisma.TransactionClient,
     secadoIds: number[],
+    loteId: number,
+    perfilSecado?: string | null,
     empaqueId?: number,
 ) {
     const secados = await tx.secado.findMany({
         where: { id: { in: secadoIds } },
-        select: { kilosResultantes: true },
+        select: { fechaFin: true, perfilProceso: true, loteId: true, secadoLotes: { select: { loteId: true } } },
     });
-    if (secados.length !== secadoIds.length || secados.some(({ kilosResultantes }) => kilosResultantes === null)) {
-        throw new Error("Seleccione secados existentes, sin duplicados y con el peso seco registrado");
+    if (secados.length !== secadoIds.length || secados.some(({ fechaFin }) => !fechaFin)) {
+        throw new Error("Seleccione secados terminados y sin duplicados");
+    }
+    const perfil = perfilSecado ?? secados[0]?.perfilProceso;
+    if (!perfil || secados.some((secado) => secado.perfilProceso !== perfil)) {
+        throw new Error("Seleccione secados del mismo perfil del lote");
+    }
+    const loteEsOrigen = (secado: typeof secados[number]) =>
+        secado.loteId === loteId || secado.secadoLotes.some((aporte) => aporte.loteId === loteId);
+    if (!secados.some(loteEsOrigen)) {
+        throw new Error("Al menos un secado debe corresponder al lote seleccionado");
     }
     const otroIngreso = await tx.empaque.findFirst({
         where: {
@@ -96,7 +120,13 @@ async function obtenerPesoSeco(
         select: { id: true },
     });
     if (otroIngreso) throw new Error("Uno o más secados ya están registrados en Almacén Pergamino");
-    return Number(secados.reduce((total, secado) => total + (secado.kilosResultantes ?? 0), 0).toFixed(2));
+}
+
+function validarPesos(kilosBrutos: number, kilosNetos: number) {
+    if (!Number.isFinite(kilosBrutos) || !Number.isFinite(kilosNetos) ||
+        kilosBrutos <= 0 || kilosNetos <= 0 || kilosNetos > kilosBrutos) {
+        throw new Error("Ingrese kilos brutos y netos mayores a cero. Los netos no pueden superar a los brutos.");
+    }
 }
 
 export async function crearEmpaque(data: EmpaqueInput) {
@@ -118,9 +148,11 @@ export async function crearEmpaque(data: EmpaqueInput) {
             throw new Error("Lote no encontrado");
         }
 
-        const pesoSeco = secadoIds.length ? await obtenerPesoSeco(tx, secadoIds) : null;
-        const kilosIngresados = pesoSeco ?? Number(data.kilosIngresados);
-        const kilosResultantes = pesoSeco ?? Number(data.kilosResultantes);
+        if (!lote.activo || !secadoIds.length) throw new Error("Seleccione un lote activo y al menos un secado terminado");
+        await validarSecados(tx, secadoIds, lote.id, data.perfilSecado);
+        const kilosIngresados = Number(data.kilosIngresados);
+        const kilosResultantes = Number(data.kilosResultantes);
+        validarPesos(kilosIngresados, kilosResultantes);
         const merma = kilosIngresados - kilosResultantes;
         const codigo = data.codigo?.trim() || (await generarCodigoEmpaque());
 
@@ -143,6 +175,7 @@ export async function crearEmpaque(data: EmpaqueInput) {
                 puntajeSca: data.puntajeSca != null ? Number(data.puntajeSca) : null,
                 perfilSensorial: data.perfilSensorial?.trim() || null,
                 fueCatado: data.fueCatado ?? null,
+                muestra: data.muestra ?? null,
                 empaqueSecados:
                     secadoIds.length > 0
                         ? {
@@ -155,15 +188,7 @@ export async function crearEmpaque(data: EmpaqueInput) {
             include: empaqueIncludeDefault,
         });
 
-        if (!secadoIds.length) await tx.lote.update({
-            where: { id: Number(data.loteId) },
-            data: {
-                estado: "EN_ALMACEN",
-                kilosActuales: kilosResultantes,
-            },
-        });
-
-        return empaque;
+        return conSaldoAlmacen(empaque);
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
@@ -185,21 +210,24 @@ export async function actualizarEmpaque(id: number, data: Partial<EmpaqueInput>)
             (data.secadoId !== undefined ? (data.secadoId ? [Number(data.secadoId)] : []) : anteriores);
         const cambiaSecados = secadoIds.length !== anteriores.length ||
             secadoIds.some((secadoId) => !anteriores.includes(secadoId));
-        const ordenes = await tx.ordenTrilla.count({ where: { empaqueId: id } });
-        if (ordenes && (cambiaSecados || (data.loteId !== undefined && data.loteId !== empaqueExistente.loteId) ||
-            (!secadoIds.length && data.kilosResultantes !== undefined &&
-                Number(data.kilosResultantes) !== empaqueExistente.kilosResultantes))) {
-            throw new Error("El registro tiene órdenes de trilla y su origen y peso ya están asociados");
-        }
-
-        const cambiaPeso = secadoIds.length && cambiaSecados;
-        const pesoSeco = cambiaPeso ? await obtenerPesoSeco(tx, secadoIds, id) : null;
-        const kilosIngresados = pesoSeco ?? (secadoIds.length ? empaqueExistente.kilosIngresados :
-            Number(data.kilosIngresados ?? empaqueExistente.kilosIngresados));
-        const kilosResultantes = pesoSeco ?? (secadoIds.length ? empaqueExistente.kilosResultantes :
-            Number(data.kilosResultantes ?? empaqueExistente.kilosResultantes));
-        const merma = kilosIngresados - kilosResultantes;
         const loteId = data.loteId ?? empaqueExistente.loteId;
+        const kilosIngresados = Number(data.kilosIngresados ?? empaqueExistente.kilosIngresados);
+        const kilosResultantes = Number(data.kilosResultantes ?? empaqueExistente.kilosResultantes);
+        if (data.kilosIngresados !== undefined || data.kilosResultantes !== undefined) {
+            validarPesos(kilosIngresados, kilosResultantes);
+        }
+        const ordenes = await tx.ordenTrilla.count({
+            where: { OR: [{ empaqueId: id }, { almacenes: { some: { empaqueId: id } } }] },
+        });
+        if (ordenes && (cambiaSecados || loteId !== empaqueExistente.loteId ||
+            kilosResultantes !== empaqueExistente.kilosResultantes)) {
+            throw new Error("Este registro ya tiene envíos a Trilla. Sus orígenes y kilos netos están comprometidos.");
+        }
+        if (cambiaSecados || loteId !== empaqueExistente.loteId) {
+            if (!secadoIds.length) throw new Error("Seleccione al menos un secado terminado");
+            await validarSecados(tx, secadoIds, loteId, data.perfilSecado, id);
+        }
+        const merma = kilosIngresados - kilosResultantes;
 
         if (cambiaSecados) {
             await tx.empaqueSecado.deleteMany({
@@ -237,21 +265,12 @@ export async function actualizarEmpaque(id: number, data: Partial<EmpaqueInput>)
                 ...(data.puntajeSca !== undefined && { puntajeSca: data.puntajeSca != null ? Number(data.puntajeSca) : null }),
                 ...(data.perfilSensorial !== undefined && { perfilSensorial: data.perfilSensorial?.trim() || null }),
                 ...(data.fueCatado !== undefined && { fueCatado: data.fueCatado }),
+                ...(data.muestra !== undefined && { muestra: data.muestra }),
             },
             include: empaqueIncludeDefault,
         });
 
-        if (!secadoIds.length && (kilosResultantes !== empaqueExistente.kilosResultantes || loteId !== empaqueExistente.loteId)) {
-            await tx.lote.update({
-                where: { id: loteId },
-                data: {
-                    estado: "EN_ALMACEN",
-                    kilosActuales: kilosResultantes,
-                },
-            });
-        }
-
-        return empaqueActualizado;
+        return conSaldoAlmacen(empaqueActualizado);
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 

@@ -304,7 +304,9 @@ export async function actualizarSecado(
                 );
             }
 
-            if (kilosResultantes !== secadoExistente.kilosResultantes) {
+            if (kilosResultantes !== secadoExistente.kilosResultantes ||
+                (data.perfilProceso !== undefined && data.perfilProceso !== secadoExistente.perfilProceso) ||
+                (secadoExistente.fechaFin && data.fechaFin === null)) {
                 const vinculos = await tx.empaque.count({
                     where: { OR: [{ secadoId: id }, { empaqueSecados: { some: { secadoId: id } } }] },
                 });

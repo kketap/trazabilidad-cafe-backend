@@ -2,6 +2,7 @@
 import type { Request, Response } from "express";
 import type { TipoCodigoLote } from "@prisma/client";
 import {
+  ErrorConflictoLote,
   ErrorValidacionLote,
   actualizarLote,
   crearLote,
@@ -118,6 +119,10 @@ export async function createLote(req: Request, res: Response) {
       res.status(400).json({ ok: false, message: error.message });
       return;
     }
+    if (error.code === "P2034") {
+      res.status(409).json({ ok: false, message: "El saldo de las cosechas cambió. Vuelve a abrir el formulario y revisa los kilos disponibles." });
+      return;
+    }
     res.status(500).json({ ok: false, message: "No pudimos crear el lote. Intenta nuevamente." });
   }
 }
@@ -153,6 +158,19 @@ export async function updateLote(req: Request, res: Response) {
 
     if (error.code === "P2025") {
       res.status(404).json({ ok: false, message: "Este lote ya no está disponible. Actualiza la lista antes de continuar." });
+      return;
+    }
+    if (error instanceof ErrorValidacionLote) {
+      res.status(400).json({ ok: false, message: error.message });
+      return;
+    }
+    if (error instanceof ErrorConflictoLote || error.code === "P2034") {
+      res.status(409).json({
+        ok: false,
+        message: error instanceof ErrorConflictoLote
+          ? error.message
+          : "El saldo del lote o de las cosechas cambió mientras guardabas. Actualiza la lista y vuelve a editar.",
+      });
       return;
     }
     res.status(500).json({ ok: false, message: "No pudimos guardar los cambios del lote. Intenta nuevamente." });

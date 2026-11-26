@@ -4,11 +4,16 @@ export type DescuentoLoteInput = {
   sacos?: number | null;
 };
 
+export type EnvioAlmacenInput = { empaqueId: number; kilosNetos: number };
+
 export type CrearOrdenTrillaDTO = {
+  enviosAlmacen?: EnvioAlmacenInput[];
   loteIds?: number[];
   empaqueId?: number;
+  empaqueIds?: number[];
+  guiaSalida?: string;
   descuentosPorLote?: DescuentoLoteInput[];
-  kilosEnviados: number;
+  kilosEnviados?: number;
   sacosEnviados?: number | null;
   fechaDespacho?: string | Date;
   codigoTrilla?: string;
@@ -25,6 +30,7 @@ export type CrearOrdenTrillaDTO = {
 };
 
 export type ActualizarOrdenTrillaDTO = {
+  guiaIngreso?: string;
   numeroGuiaHayland?: string | null;
   estadoManual?: "EN_PROCESO" | "TERMINADO" | "DESPACHADO";
   exportable2?: number | null;

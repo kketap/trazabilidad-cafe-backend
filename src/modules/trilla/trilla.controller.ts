@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import {
   listarOrdenesTrilla,
   obtenerOrdenTrillaPorId,
+  ErrorEnvioAlmacen,
   crearOrdenTrilla,
   actualizarOrdenTrilla,
   eliminarOrdenTrilla,
@@ -44,6 +45,9 @@ export async function createOrdenTrillaController(req: Request, res: Response) {
     const {
       loteIds,
       empaqueId,
+      empaqueIds,
+      enviosAlmacen,
+      guiaSalida,
       sacosEnviados,
       kilosEnviados,
       codigoTrilla,
@@ -60,12 +64,12 @@ export async function createOrdenTrillaController(req: Request, res: Response) {
       cascarilla,
     } = req.body;
 
-    if (empaqueId == null && (!Array.isArray(loteIds) || loteIds.length === 0)) {
+    if (enviosAlmacen === undefined && empaqueIds === undefined && empaqueId == null && (!Array.isArray(loteIds) || loteIds.length === 0)) {
       res.status(400).json({ ok: false, message: "Debe seleccionar al menos un lote (loteIds)" });
       return;
     }
 
-    if (kilosEnviados === undefined || kilosEnviados === null || isNaN(Number(kilosEnviados))) {
+    if (enviosAlmacen === undefined && empaqueIds === undefined && (kilosEnviados == null || isNaN(Number(kilosEnviados)))) {
       res.status(400).json({ ok: false, message: "El campo 'kilosEnviados' es obligatorio y debe ser numérico" });
       return;
     }
@@ -73,6 +77,9 @@ export async function createOrdenTrillaController(req: Request, res: Response) {
     const orden = await crearOrdenTrilla({
       loteIds: Array.isArray(loteIds) ? loteIds.map(Number) : undefined,
       empaqueId: empaqueId == null ? undefined : Number(empaqueId),
+      empaqueIds,
+      enviosAlmacen,
+      guiaSalida,
       sacosEnviados,
       kilosEnviados: Number(kilosEnviados),
       codigoTrilla: codigoTrilla ? String(codigoTrilla).trim() : undefined,
@@ -94,6 +101,21 @@ export async function createOrdenTrillaController(req: Request, res: Response) {
     console.error("Error creando orden de trilla:", error);
     if (error.code === "P2002") {
       res.status(400).json({ ok: false, message: "El código de trilla ya existe" });
+      return;
+    }
+    if (error instanceof ErrorEnvioAlmacen) {
+      res.status(error.estado).json({ ok: false, message: error.message });
+      return;
+    }
+    if (error.code === "P2034") {
+      res.status(409).json({
+        ok: false,
+        message: "Otro envío modificó el saldo disponible. Revisa los saldos actualizados e intenta nuevamente.",
+      });
+      return;
+    }
+    if (req.body?.enviosAlmacen !== undefined) {
+      res.status(500).json({ ok: false, message: "No se pudo registrar el envío a Trilla. Intenta nuevamente." });
       return;
     }
     res.status(400).json({ ok: false, message: error.message || "Error creando orden de trilla" });
@@ -119,6 +141,7 @@ export async function updateOrdenTrillaController(req: Request, res: Response) {
       kilosNetos,
       estadoManual,
       numeroGuiaHayland,
+      guiaIngreso,
       exportable2,
       exportable3,
       exportable4,
@@ -137,6 +160,7 @@ export async function updateOrdenTrillaController(req: Request, res: Response) {
     const orden = await actualizarOrdenTrilla(id, {
       estadoManual,
       numeroGuiaHayland,
+      guiaIngreso,
       exportable2,
       exportable3,
       exportable4,
@@ -165,6 +189,13 @@ export async function updateOrdenTrillaController(req: Request, res: Response) {
     console.error("Error actualizando orden de trilla:", error);
     if (error.code === "P2002") {
       res.status(400).json({ ok: false, message: "El código de trilla ya existe" });
+      return;
+    }
+    if (error.code === "P2025") {
+      res.status(409).json({
+        ok: false,
+        message: "La orden cambió o dejó de estar disponible. Actualiza el listado antes de volver a guardar.",
+      });
       return;
     }
     res.status(400).json({ ok: false, message: error.message || "Error actualizando orden de trilla" });

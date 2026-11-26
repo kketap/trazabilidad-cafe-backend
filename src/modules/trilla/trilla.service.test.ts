@@ -1,7 +1,12 @@
 import { prisma } from "../../config/prisma";
-import { crearOrdenTrilla, enriquecerOrdenTrilla } from "./trilla.service";
+import { actualizarOrdenTrilla, crearOrdenTrilla, enriquecerOrdenTrilla } from "./trilla.service";
 
-jest.mock("../../config/prisma", () => ({ prisma: { $transaction: jest.fn() } }));
+jest.mock("../../config/prisma", () => ({
+    prisma: {
+        $transaction: jest.fn(),
+        ordenTrilla: { findUnique: jest.fn(), update: jest.fn() },
+    },
+}));
 
 describe("Trilla desde Almacén Pergamino", () => {
     const orden = { empaqueId: 1, kilosEnviados: 50 };
@@ -46,6 +51,49 @@ describe("Trilla desde Almacén Pergamino", () => {
         const { metricasRendimiento } = enriquecerOrdenTrilla({
             kilosEnviados: 100, exportable: 20, exportable2: 15, exportable3: 10, exportable4: 5,
         });
-        expect(metricasRendimiento).toMatchObject({ exportableKg: 50, exportablePct: 50 });
+        expect(metricasRendimiento).toMatchObject({
+            exportableKg: 50, exportablePct: 50, restoKg: 0, restoPct: 0,
+        });
+    });
+
+    it("calcula otros subproductos registrados sin incluir los kilos aún sin distribuir", () => {
+        const { metricasRendimiento } = enriquecerOrdenTrilla({
+            kilosEnviados: 150, kilosNetos: 100, exportable: 1, exportable2: 2, exportable3: 3, recuperado: 4,
+            malla13: 5, segundaBuena: 6, segundaMala: 7, sucioEscojo: 8, cisco: 9, descarteMaquina: 10, cascarilla: 11,
+        });
+        expect(metricasRendimiento).toMatchObject({
+            baseKilos: 100, exportableKg: 6, recuperadoKg: 4, restoKg: 56, restoPct: 56,
+        });
+    });
+});
+
+describe("Peso neto de la recepción de trilla", () => {
+    const buscar = prisma.ordenTrilla.findUnique as jest.Mock;
+    const guardar = prisma.ordenTrilla.update as jest.Mock;
+    const orden = { id: "orden-prueba", kilosEnviados: 150, kilosNetos: 120, _count: { almacenes: 0 } };
+
+    beforeEach(() => {
+        buscar.mockReset().mockResolvedValue(orden);
+        guardar.mockReset().mockImplementation(({ data }) => ({ ...orden, ...data }));
+    });
+
+    it("bloquea la recepción con más kilos netos que enviados", async () => {
+        await expect(actualizarOrdenTrilla(orden.id, { kilosNetos: 200 }))
+            .rejects.toThrow("Los kilos netos resultantes no pueden superar los 150 kg enviados.");
+        expect(guardar).not.toHaveBeenCalled();
+    });
+
+    it.each([null, 135.25, 150])("permite guardar un peso neto válido u opcional (%s)", async (kilosNetos) => {
+        await actualizarOrdenTrilla(orden.id, { kilosNetos });
+        expect(guardar).toHaveBeenCalledWith(expect.objectContaining({
+            where: { id: orden.id, kilosEnviados: 150, kilosNetos: 120 },
+            data: { kilosNetos },
+        }));
+    });
+
+    it("impide reducir los kilos enviados por debajo del peso neto guardado", async () => {
+        await expect(actualizarOrdenTrilla(orden.id, { kilosEnviados: 100 }))
+            .rejects.toThrow("no pueden superar los 100 kg enviados");
+        expect(guardar).not.toHaveBeenCalled();
     });
 });

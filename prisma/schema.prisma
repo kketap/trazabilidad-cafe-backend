@@ -257,6 +257,7 @@ model Empaque {
   updatedAt        DateTime        @updatedAt
   actividadAgua    Float?
   fueCatado        Boolean?
+  muestra          Boolean?
   humedad          Float?
   perfilSensorial  String?
   puntajeSca       Float?
@@ -269,6 +270,7 @@ model Empaque {
   secado           Secado?         @relation(fields: [secadoId], references: [id])
   empaqueSecados   EmpaqueSecado[]
   ordenesTrilla    OrdenTrilla[]
+  enviosTrilla     OrdenTrillaAlmacen[]
 }
 
 model EmpaqueSecado {
@@ -301,6 +303,8 @@ model OrdenTrilla {
   malla13         Float?
   numeroGuia      String?
   numeroGuiaHayland String?
+  guiaSalida      String?
+  guiaIngreso     String?
   estadoManual    EstadoOrdenTrilla?
   exportable2     Float?
   exportable3     Float?
@@ -316,6 +320,19 @@ model OrdenTrilla {
   empaque         Empaque?          @relation(fields: [empaqueId], references: [id], onDelete: Restrict)
   ventas          Venta[]
 
+  almacenes       OrdenTrillaAlmacen[]
+
+  @@index([empaqueId])
+}
+
+model OrdenTrillaAlmacen {
+  ordenTrillaId String
+  empaqueId     Int
+  kilosNetos    Float
+  ordenTrilla   OrdenTrilla @relation(fields: [ordenTrillaId], references: [id], onDelete: Cascade)
+  empaque       Empaque     @relation(fields: [empaqueId], references: [id], onDelete: Restrict)
+
+  @@id([ordenTrillaId, empaqueId])
   @@index([empaqueId])
 }
 
